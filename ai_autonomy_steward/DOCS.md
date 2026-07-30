@@ -2,7 +2,6 @@
 
 A Home Assistant App that continuously reasons about your home's current state, proposes actions for one-time approval, then acts autonomously - bounded by an append-only constraint layer that only ever grows stricter.
 
-
 AI Autonomy Steward is the continuous reasoning layer of your autonomous home (System 2,
 in the four-layer architecture this project settled on: System 0 is
 perception - Home Assistant's sensors, and later Frigate/Tara; System 1 is
@@ -10,12 +9,28 @@ fast deterministic automations; System 2 is AI Autonomy Steward; and a separate,
 independent constraint layer gates everything AI Autonomy Steward proposes before it
 can execute).
 
+## This App requires a companion integration
+
+This App's own options have no entity/service selector type, so
+`notify_service` and the AI Task entity are **not** configured here.
+Install and configure `custom_components/ai_autonomy_steward_config`
+first (Settings → Devices & Services → Add Integration → search
+"AI Autonomy Steward Config") - it provides real entity/service pickers
+validated against your actual HA data, and exposes the result as
+`sensor.ai_autonomy_steward_config`, which this App reads.
+
 ## What it does
 
-Every cycle, AI Autonomy Steward pulls the complete current state of your home fresh -
-not a diff, not an accumulated history, the whole picture as it stands
-right now - and reasons about whether anything is worth doing. If it
-decides something is warranted:
+AI Autonomy Steward subscribes to Home Assistant's event stream and
+actively waits - it is never on a timer, never polling. When anything
+changes, it wakes, pulls the complete current state fresh - not a diff,
+not an accumulated history, the whole picture as it stands right now -
+and reasons about whether anything is worth doing. A burst of several
+changes at once coalesces into a single reasoning pass rather than firing
+one per event, but the wake condition is always "something changed,"
+never "time has passed."
+
+If it decides something is warranted:
 
 - **New kind of action:** it proposes it to you (a mobile notification with
   Approve / Deny / Never). It does not act until you approve.
@@ -39,15 +54,16 @@ away is you editing `constraints.yaml` directly.
 
 ## Configuration
 
-| Option | Description |
-|---|---|
-| `notify_service` | The `notify.*` service used for approval prompts, e.g. `notify.mobile_app_your_phone` |
-| `min_confidence` | AI Autonomy Steward won't act or propose below this confidence (0-1) |
-| `cycle_delay_seconds` | Pause between reasoning passes - a pragmatic throttle on GPU load, not a schedule AI Autonomy Steward waits on |
+| Field | Where it's set | Description |
+|---|---|---|
+| `notify_service` | Companion integration (entity selector) | Real `notify.*` service used for approval prompts |
+| `ai_task_entity` | Companion integration (entity selector) | Real `ai_task.*` entity used for reasoning passes |
+| `min_confidence` | This App's Configuration tab | Won't act or propose below this confidence (0-1) |
 
 ## Status
 
-First build, unexercised. What AI Autonomy Steward can currently perceive is limited to
-Home Assistant's own state - Frigate and Tara are not yet wired in as
-input sources, but the code is structured so adding them later doesn't
-require redesigning the reasoning loop.
+Second build. First build wrongly used a fixed polling interval;
+corrected to genuine event-driven wake. Unexercised in production either
+way. Frigate and Tara are not yet wired in as input sources, but the code
+is structured so adding them later doesn't require redesigning the
+reasoning loop.

@@ -1,25 +1,27 @@
 """
-System 2 — continuous, stateless, goal-level reasoning.
+AI Autonomy Steward - continuous, stateless, goal-level reasoning.
+System 2 in the four-layer architecture (System 0: perception, System 1:
+fast deterministic automations, System 2: this app, plus an independent
+constraint layer gating everything System 2 proposes).
 
-Native Supervisor App (not AppDaemon) - talks to HA Core directly over the
-Supervisor-proxied WebSocket API, same mechanism the original
-continuous_autonomy app used, since that part of the earlier design was
-never the problem.
+Trigger model, corrected 30 Jul 2026: NOT a polling timer, NOT a schedule.
+This app subscribes to HA's event stream and stays blocked, actively
+waiting, until something actually changes. When a change arrives it wakes,
+pulls the COMPLETE current state fresh (not the delta that woke it - the
+whole picture, stateless per pass, per the reactive-control-loop design),
+reasons over it, then goes back to waiting. Rapid bursts of related events
+are coalesced into a single reasoning pass via a short debounce - this is
+event coalescing, not a timer; the wake condition is always "something
+changed," never "time has passed."
 
-Architecture position (30 Jul four-layer decision):
-- System 0 (perception): HA state today, via VM 244. Frigate and Tara are
-  not plumbed in yet - INPUT_SOURCES below is written so they add as new
-  entries later without touching the loop itself.
-- System 1 (fast deterministic automations): untouched, not represented
-  here.
-- System 2 (this file): reasons continuously, stateless per cycle - pulls
-  the CURRENT complete state fresh every pass. Nothing about "what
-  changed" is carried between cycles; only the persisted approved-types
-  list survives across cycles.
-- Constraint layer (constraint_layer.py): separate component. Every
-  proposed action is checked there before execution, including
-  already-approved types, every single cycle - never trusted to System 2's
-  own judgement alone.
+Configuration: min_confidence lives in this App's own native options
+(plain float, no entity relationship). notify_service and the AI Task
+entity are NOT configured here - they come from the companion
+'ai_autonomy_steward_config' integration's config flow, which provides
+real entity/service selectors validated against live HA data. This app
+reads sensor.ai_autonomy_steward_config's attributes once at startup and
+again on every change to that sensor, so reconfiguring through the
+integration's UI updates this app live.
 """
 
 import asyncio
@@ -34,16 +36,15 @@ import aiohttp
 import constraint_layer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-LOGGER = logging.getLogger("system2")
+LOGGER = logging.getLogger("ai_autonomy_steward")
 
 SUPERVISOR_TOKEN = os.environ["SUPERVISOR_TOKEN"]
 WS_URL = "ws://supervisor/core/websocket"
 DATA_PATH = Path("/data/approved_action_types.json")
+CONFIG_ENTITY_ID = "sensor.ai_autonomy_steward_config"
 
-NOTIFY_SERVICE = os.environ.get("NOTIFY_SERVICE", "notify")
 MIN_CONFIDENCE = float(os.environ.get("MIN_CONFIDENCE", "0.70"))
-CYCLE_DELAY_SECONDS = int(os.environ.get("CYCLE_DELAY_SECONDS", "15"))
-AI_TASK_ENTITY = "ai_task.gemma_4_26b_a4b_it_ggu_f_ai_task"  # confirm exact entity_id in HA before first run
+DEBOUNCE_SECONDS = 5  # coalesces a burst of simultaneous events into one reasoning pass - not a schedule, see module docstring
 
 CHARTER = """
 PURPOSE
@@ -122,6 +123,12 @@ class AIAutonomySteward:
         self._pending = {}
         self.ws = None
 
+        # Populated from sensor.ai_autonomy_steward_config - see _apply_config.
+        self.notify_service: str = ""
+        self.ai_task_entity: str = ""
+
+        self._debounce_task: asyncio.Task | None = None
+
     def _next_id(self) -> int:
         self._msg_id += 1
         return self._msg_id
@@ -142,11 +149,26 @@ class AIAutonomySteward:
             payload["return_response"] = True
         return await self._send(payload)
 
+    # ---- config, from the companion integration - not from App options ----
+
+    def _apply_config(self, attrs: dict) -> None:
+        self.notify_service = attrs.get("notify_service") or ""
+        self.ai_task_entity = attrs.get("ai_task_entity") or ""
+        LOGGER.info("Config applied: notify via %s, AI Task entity %s", self.notify_service, self.ai_task_entity)
+
+    async def fetch_config(self) -> None:
+        result = await self._send({"type": "get_states"})
+        for state in (result.get("result") or []):
+            if state.get("entity_id") == CONFIG_ENTITY_ID:
+                self._apply_config(state.get("attributes") or {})
+                return
+        LOGGER.warning(
+            "%s not found. Install and configure the 'AI Autonomy Steward Config' "
+            "integration first (Settings -> Devices & Services -> Add Integration).",
+            CONFIG_ENTITY_ID,
+        )
+
     # ---- System 0 access: extensible, per "don't hard-code today's limits" ----
-    #
-    # Each source is an async function returning a dict fragment for the
-    # snapshot, or None if unavailable. Frigate/Tara get added as new
-    # entries here later - nothing else about the loop changes.
 
     async def _source_ha_state(self) -> dict:
         result = await self._send({"type": "get_states"})
@@ -170,9 +192,13 @@ class AIAutonomySteward:
                 snapshot.update(fragment)
         return snapshot
 
-    # ---- the stateless loop ----
+    # ---- the reasoning pass - triggered by a wake, not a timer ----
 
-    async def cycle(self):
+    async def _reason(self):
+        if not self.ai_task_entity:
+            LOGGER.warning("No AI Task entity configured yet - skipping pass")
+            return
+
         snapshot = await self.gather_state()
         approved_summary = (
             {k: v.get("description", "") for k, v in self.approved_types.items()}
@@ -188,12 +214,8 @@ class AIAutonomySteward:
         try:
             result = await self.call_service(
                 "ai_task", "generate_data",
-                {
-                    "task_name": "system2 reasoning pass",
-                    "instructions": instructions,
-                    "structure": DECISION_STRUCTURE,
-                },
-                target={"entity_id": AI_TASK_ENTITY},
+                {"task_name": "ai autonomy steward reasoning pass", "instructions": instructions, "structure": DECISION_STRUCTURE},
+                target={"entity_id": self.ai_task_entity},
                 return_response=True,
             )
         except Exception:
@@ -234,6 +256,10 @@ class AIAutonomySteward:
         await self._propose(data, is_revision)
 
     async def _propose(self, data: dict, is_revision: bool):
+        if not self.notify_service:
+            LOGGER.warning("No notify_service configured yet - cannot request approval for: %s", data)
+            return
+
         action_type = data.get("action_type", "")
         service = data.get("service", "")
         target = data.get("target_entity", "")
@@ -244,7 +270,7 @@ class AIAutonomySteward:
         never_action = f"S2_NEVER::{action_type}::{service}::{target}"
 
         notify_domain, notify_svc = (
-            NOTIFY_SERVICE.split(".", 1) if "." in NOTIFY_SERVICE else ("notify", NOTIFY_SERVICE)
+            self.notify_service.split(".", 1) if "." in self.notify_service else ("notify", self.notify_service)
         )
         await self.call_service(
             notify_domain, notify_svc,
@@ -276,6 +302,20 @@ class AIAutonomySteward:
             constraint_layer.add_never_rule(service, target, action_type, reasoning=f"Rejected: {action_type}")
             LOGGER.info("Constraint added: '%s' (%s -> %s) is now permanently forbidden", action_type, service, target)
 
+    # ---- wake-on-change, with burst coalescing ----
+
+    def _schedule_reasoning_pass(self):
+        if self._debounce_task is not None:
+            self._debounce_task.cancel()
+        self._debounce_task = asyncio.create_task(self._debounced_reason())
+
+    async def _debounced_reason(self):
+        try:
+            await asyncio.sleep(DEBOUNCE_SECONDS)
+            await self._reason()
+        except asyncio.CancelledError:
+            pass
+
     async def _receiver(self):
         async for msg in self.ws:
             if msg.type != aiohttp.WSMsgType.TEXT:
@@ -289,19 +329,25 @@ class AIAutonomySteward:
 
             if mtype == "event":
                 event = data.get("event", {})
-                if event.get("event_type") == "mobile_app_notification_action":
+                event_type = event.get("event_type")
+
+                if event_type == "state_changed":
+                    ev_data = event.get("data", {})
+                    entity_id = ev_data.get("entity_id", "")
+                    new_state_obj = ev_data.get("new_state") or {}
+
+                    if entity_id == CONFIG_ENTITY_ID:
+                        self._apply_config(new_state_obj.get("attributes") or {})
+                        continue
+
+                    # Any HA state change wakes the reasoning pass - actively
+                    # waiting, not polling. A burst of changes coalesces via
+                    # the debounce above into a single pass.
+                    self._schedule_reasoning_pass()
+
+                elif event_type == "mobile_app_notification_action":
                     action = event.get("data", {}).get("action", "")
                     asyncio.create_task(self.handle_notification_action(action))
-
-    async def _cycle_loop(self):
-        # Continuous - not a schedule. Always immediately queues the next
-        # cycle after the previous one finishes. CYCLE_DELAY_SECONDS is a
-        # pragmatic throttle so an idle home doesn't hammer the GPU engine
-        # with back-to-back full reasoning calls - not the trigger
-        # mechanism itself. Revisit once real cycle cost is measured.
-        while True:
-            await self.cycle()
-            await asyncio.sleep(CYCLE_DELAY_SECONDS)
 
     async def run(self):
         async with aiohttp.ClientSession() as session:
@@ -315,13 +361,16 @@ class AIAutonomySteward:
                     raise RuntimeError(f"Auth failed: {auth_result}")
                 LOGGER.info("Authenticated against Home Assistant Core")
 
-                await self._send({"type": "subscribe_events", "event_type": "mobile_app_notification_action"})
                 receiver = asyncio.create_task(self._receiver())
+
+                await self.fetch_config()
+                await self._send({"type": "subscribe_events", "event_type": "state_changed"})
+                await self._send({"type": "subscribe_events", "event_type": "mobile_app_notification_action"})
                 LOGGER.info(
-                    "System 2 started. %d approved type(s): %s",
+                    "AI Autonomy Steward started, actively waiting for changes. %d approved type(s): %s",
                     len(self.approved_types), list(self.approved_types.keys()),
                 )
-                await asyncio.gather(receiver, self._cycle_loop())
+                await receiver
 
 
 async def main():
