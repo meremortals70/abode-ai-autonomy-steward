@@ -10,15 +10,30 @@ System 1 is fast deterministic automations, **System 2 is this App**, and a
 separate, independent constraint layer gates everything it proposes before
 execution.
 
+## Two components, install both
+
+- **`ai_autonomy_steward`** - the App itself (Supervisor-managed container,
+  independent of HA Core's own restart cycle).
+- **`custom_components/ai_autonomy_steward_config`** - a companion
+  integration that runs inside HA Core, purely to provide real
+  entity/service selectors for `notify_service` and the AI Task entity.
+  The App's own options schema has no entity type, so this is the only way
+  those two fields can be validated against your actual HA data instead of
+  typed as free text.
+
 ## What it does
 
-Every cycle, it pulls the complete current state of your home fresh - not
-a diff, the whole picture, every time - and reasons about whether anything
-is worth doing.
+It subscribes to Home Assistant's event stream and actively waits - it is
+never on a timer, never polling. When anything changes, it wakes, pulls
+the **complete current state fresh** (not a diff, the whole picture, every
+time), and reasons about whether anything is worth doing. A burst of
+several changes at once coalesces into a single reasoning pass rather than
+firing one per event, but the wake condition is always "something
+changed," never "time has passed."
 
 - **New kind of action:** proposed to you via mobile notification
   (Approve / Deny / Never). It does not act until approved.
-- **Already-approved kind of action:** still decides fresh, every cycle,
+- **Already-approved kind of action:** still decides fresh, every pass,
   whether this specific moment actually calls for it.
 - **A better way to do something already approved:** it can propose
   retiring or replacing an approved action, subject to the same approval
@@ -35,30 +50,35 @@ removed by editing `constraints.yaml` directly, outside the running app.
 
 ## Installation
 
-1. Settings → Add-ons → Add-on Store → ⋮ → Repositories → add this repo's
-   URL.
-2. Find **AI Autonomy Steward** in the store → Install.
-3. Configuration tab → set `notify_service` to your real notify target
-   (e.g. `notify.mobile_app_your_phone`).
-4. Confirm the `AI_TASK_ENTITY` constant near the top of
-   `ai_autonomy_steward.py` matches your actual AI Task entity's
-   `entity_id` before first start.
-5. Start the app, check the Log tab for confirmation it authenticated
-   against HA Core and began its reasoning cycle.
+1. Install the companion integration: copy
+   `custom_components/ai_autonomy_steward_config` into your HA `config/
+   custom_components/` folder (or via HACS custom repository), restart HA,
+   then Settings → Devices & Services → Add Integration → search
+   "AI Autonomy Steward Config" → select your real `notify.*` service and
+   your real `ai_task.*` entity.
+2. Install the App: Settings → Add-ons → Add-on Store → ⋮ → Repositories
+   → add this repo's URL → find **AI Autonomy Steward** → Install.
+3. Configuration tab → confirm `min_confidence` (default 0.70) - this is
+   the only App-level option now.
+4. Start the app, check the Log tab for "Authenticated against Home
+   Assistant Core" and "AI Autonomy Steward started, actively waiting for
+   changes."
 
 ## Configuration
 
-| Option | Description |
-|---|---|
-| `notify_service` | The `notify.*` service used for approval prompts |
-| `min_confidence` | Won't act or propose below this confidence (0-1) |
-| `cycle_delay_seconds` | Pause between reasoning passes - a throttle on GPU load, not a schedule it waits on |
+| Field | Where it's set | Description |
+|---|---|---|
+| `notify_service` | Companion integration (entity selector) | Real `notify.*` service for approval prompts |
+| `ai_task_entity` | Companion integration (entity selector) | Real `ai_task.*` entity used for reasoning passes |
+| `min_confidence` | App options | Won't act or propose below this confidence (0-1) |
 
 ## Status
 
-First build, unexercised in production. Frigate and Tara are not yet
-wired in as input sources - the code is structured so they can be added
-later without redesigning the reasoning loop.
+Second build. First build wrongly used a fixed polling interval; corrected
+to genuine event-driven wake per the settled architecture. Unexercised in
+production either way. Frigate and Tara are not yet wired in as input
+sources - the code is structured so they can be added later without
+redesigning the reasoning loop.
 
 ## License
 
