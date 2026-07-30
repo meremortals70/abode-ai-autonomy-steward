@@ -78,6 +78,12 @@ Second build. First build wrongly used a fixed polling interval; corrected
 to genuine event-driven wake per the settled architecture. Unexercised in
 production either way. Frigate and Tara are not yet wired in as input
 sources - the code is structured so they can be added later without
+
+## Credits
+
+Designed and directed by Jason Wienert (Mere Mortals Consulting).
+Implementation, research and code written in collaboration with
+Claude (Anthropic).
 redesigning the reasoning loop.
 
 ## License
