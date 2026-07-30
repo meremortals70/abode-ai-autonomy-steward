@@ -1,0 +1,37 @@
+# Constraint layer — deterministic, append-only.
+#
+# This file is never edited by anything automated. System 2 (or the
+# approval-notification handler) may APPEND a new entry when a resident
+# taps "Never". Nothing in the running system can remove or modify an
+# existing entry — the only way a constraint goes away is Jason editing
+# this file directly, outside the app.
+#
+# A proposed action is blocked if it matches every non-null field of any
+# entry below. Fields left out of an entry are wildcards.
+
+- id: charter-001
+  added_at: "2026-07-30T00:00:00Z"
+  source: charter_default
+  description: >
+    Never disable, silence, or delay a smoke, heat, gas, or carbon-monoxide
+    alarm, or any security/alarm arming state.
+  match:
+    service_prefix: "alarm_control_panel.alarm_disarm"
+
+- id: charter-002
+  added_at: "2026-07-30T00:00:00Z"
+  source: charter_default
+  description: >
+    Never unlock in a way that could trap a resident inside or lock them
+    out, without an action_type explicitly covering this exact scenario.
+  match:
+    service_prefix: "lock.unlock"
+
+- id: charter-003
+  added_at: "2026-07-30T00:00:00Z"
+  source: charter_default
+  description: >
+    Never cast content to a shared screen or speaker without an approved,
+    specific action_type covering that exact target.
+  match:
+    service_prefix: "media_player.play_media"
