@@ -342,7 +342,10 @@ class AIAutonomySteward:
 
                     # Any HA state change wakes the reasoning pass - actively
                     # waiting, not polling. A burst of changes coalesces via
-                    # the debounce above into a single pass.
+                    # the debounce above into a single pass. Logged per-entity
+                    # so noisy/high-frequency entities can be identified and
+                    # filtered, rather than guessed at.
+                    LOGGER.info("Wake trigger: %s changed to %s", entity_id, new_state_obj.get("state"))
                     self._schedule_reasoning_pass()
 
                 elif event_type == "mobile_app_notification_action":
