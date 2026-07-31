@@ -1,4 +1,4 @@
-# AI Autonomy Steward
+# Abode AI Autonomy Steward
 
 A Home Assistant App that continuously reasons about your home's current
 state, proposes actions for one-time approval, then acts autonomously -
@@ -12,9 +12,9 @@ execution.
 
 ## Two components, install both
 
-- **`ai_autonomy_steward`** - the App itself (Supervisor-managed container,
+- **`abode_ai_autonomy_steward`** - the App itself (Supervisor-managed container,
   independent of HA Core's own restart cycle).
-- **`custom_components/ai_autonomy_steward_config`** - a companion
+- **`custom_components/abode_ai_autonomy_steward_config`** - a companion
   integration that runs inside HA Core, purely to provide real
   entity/service selectors for `notify_service` and the AI Task entity.
   The App's own options schema has no entity type, so this is the only way
@@ -51,17 +51,17 @@ removed by editing `constraints.yaml` directly, outside the running app.
 ## Installation
 
 1. Install the companion integration: copy
-   `custom_components/ai_autonomy_steward_config` into your HA `config/
+   `custom_components/abode_ai_autonomy_steward_config` into your HA `config/
    custom_components/` folder (or via HACS custom repository), restart HA,
    then Settings → Devices & Services → Add Integration → search
-   "AI Autonomy Steward Config" → select your real `notify.*` service and
+   "Abode AI Autonomy Steward Config" → select your real `notify.*` service and
    your real `ai_task.*` entity.
 2. Install the App: Settings → Add-ons → Add-on Store → ⋮ → Repositories
-   → add this repo's URL → find **AI Autonomy Steward** → Install.
+   → add this repo's URL → find **Abode AI Autonomy Steward** → Install.
 3. Configuration tab → confirm `min_confidence` (default 0.70) - this is
    the only App-level option now.
 4. Start the app, check the Log tab for "Authenticated against Home
-   Assistant Core" and "AI Autonomy Steward started, actively waiting for
+   Assistant Core" and "Abode AI Autonomy Steward started, actively waiting for
    changes."
 
 ## Configuration
