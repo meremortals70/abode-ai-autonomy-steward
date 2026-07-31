@@ -28,6 +28,7 @@ import asyncio
 import json
 import os
 import logging
+import sys
 import time
 from pathlib import Path
 
@@ -385,5 +386,30 @@ async def main():
             await asyncio.sleep(10)
 
 
+def _require_constraints() -> int:
+    """Seed the constraint file if absent, then refuse to run with zero rules.
+
+    Deliberately outside main()'s retry loop: main() catches Exception and
+    retries every 10s, so raising in there would spin forever instead of
+    stopping. A System 2 that reasons and acts with no constraint layer is a
+    worse outcome than a System 2 that does not start.
+    """
+    constraint_layer.seed_if_absent()
+    count = constraint_layer.rule_count()
+
+    if count == 0:
+        LOGGER.critical(
+            "Refusing to start: 0 constraints loaded from %s. System 2 will "
+            "not reason or act without an enforced boundary. Reinstall the "
+            "App, or place a valid constraints.yaml at that path.",
+            constraint_layer.CONSTRAINTS_PATH,
+        )
+        sys.exit(1)
+
+    LOGGER.info("Constraint layer active: %d rule(s) in force.", count)
+    return count
+
+
 if __name__ == "__main__":
+    _require_constraints()
     asyncio.run(main())

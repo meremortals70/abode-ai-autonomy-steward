@@ -5,13 +5,54 @@ package: no model call, no delete/edit function anywhere in this file,
 System 2 can only append via add_never_rule().
 """
 
+import logging
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
+LOGGER = logging.getLogger("abode_ai_autonomy_steward")
+
 CONSTRAINTS_PATH = Path("/data/constraints.yaml")
+"""The live, append-only constraint file. Persists across App restarts."""
+
+SHIPPED_DEFAULTS = Path("/constraints.yaml")
+"""The charter defaults baked into the image by the Dockerfile.
+
+These are a seed, not the source of truth. Once CONSTRAINTS_PATH exists it
+is never overwritten from here - it may hold "Never" rules appended by a
+resident, and this layer is append-only by design.
+"""
+
+
+def seed_if_absent() -> None:
+    """Copy the shipped defaults into /data on first run only.
+
+    Before 0.4.1 nothing ever wrote CONSTRAINTS_PATH except add_never_rule(),
+    and the Dockerfile did not ship the defaults into the image at all. The
+    result was that _load() returned [] on every call and is_blocked() never
+    blocked anything - silently, because an empty constraint layer logs
+    exactly the same as a working one.
+    """
+    if CONSTRAINTS_PATH.exists():
+        return
+
+    if not SHIPPED_DEFAULTS.exists():
+        LOGGER.error(
+            "No constraints at %s and no shipped defaults at %s to seed from.",
+            CONSTRAINTS_PATH, SHIPPED_DEFAULTS,
+        )
+        return
+
+    shutil.copyfile(SHIPPED_DEFAULTS, CONSTRAINTS_PATH)
+    LOGGER.info("Seeded %s from shipped charter defaults.", CONSTRAINTS_PATH)
+
+
+def rule_count() -> int:
+    """Number of constraints currently in force. Zero is a failure state."""
+    return len(_load())
 
 
 def _load() -> list:
