@@ -43,6 +43,7 @@ SUPERVISOR_TOKEN = os.environ["SUPERVISOR_TOKEN"]
 WS_URL = "ws://supervisor/core/websocket"
 DATA_PATH = Path("/data/approved_action_types.json")
 CONFIG_ENTITY_ID = "sensor.abode_ai_autonomy_steward_config"
+TRIGGER_EVENT = "abode_ai_autonomy_steward_config.trigger_reasoning"
 
 MIN_CONFIDENCE = float(os.environ.get("MIN_CONFIDENCE", "0.70"))
 DEBOUNCE_SECONDS = 5  # coalesces a burst of simultaneous events into one reasoning pass - not a schedule, see module docstring
@@ -212,18 +213,28 @@ class AIAutonomySteward:
             "Decide, per the charter above, whether an autonomous action is warranted right now."
         )
 
+        service_data = {
+            "task_name": "ai autonomy steward reasoning pass",
+            "instructions": instructions,
+            "structure": DECISION_STRUCTURE,
+            "entity_id": self.ai_task_entity,
+        }
         try:
             result = await self.call_service(
                 "ai_task", "generate_data",
-                {"task_name": "ai autonomy steward reasoning pass", "instructions": instructions, "structure": DECISION_STRUCTURE},
-                target={"entity_id": self.ai_task_entity},
+                service_data,
                 return_response=True,
             )
         except Exception:
             LOGGER.exception("ai_task.generate_data call failed")
             return
 
-        data = ((result or {}).get("result") or {}).get("response", {}).get("data") or {}
+        # ai_task.generate_data returns its response directly under the
+        # service result as {"data": ..., "conversation_id": ...}, not nested
+        # under a "response" key.
+        data = ((result or {}).get("result") or {}).get("data") or {}
+        if not data:
+            LOGGER.debug("ai_task.generate_data returned empty data; raw result: %s", result)
         await self._handle_decision(data)
 
     async def _handle_decision(self, data: dict):
@@ -353,6 +364,10 @@ class AIAutonomySteward:
                     action = event.get("data", {}).get("action", "")
                     asyncio.create_task(self.handle_notification_action(action))
 
+                elif event_type == TRIGGER_EVENT:
+                    LOGGER.info("Wake trigger: %s requested by LLM tool", TRIGGER_EVENT)
+                    self._schedule_reasoning_pass()
+
     async def run(self):
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(WS_URL) as ws:
@@ -370,6 +385,7 @@ class AIAutonomySteward:
                 await self.fetch_config()
                 await self._send({"type": "subscribe_events", "event_type": "state_changed"})
                 await self._send({"type": "subscribe_events", "event_type": "mobile_app_notification_action"})
+                await self._send({"type": "subscribe_events", "event_type": TRIGGER_EVENT})
                 LOGGER.info(
                     "Abode AI Autonomy Steward started, actively waiting for changes. %d approved type(s): %s",
                     len(self.approved_types), list(self.approved_types.keys()),

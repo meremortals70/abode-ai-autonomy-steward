@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Abode AI Autonomy Steward Config",
+        "description": "Choose the notification service and AI Task entity that the Abode AI Autonomy Steward App will use.",
+        "data": {
+          "notify_service": "Notify service",
+          "ai_task_entity": "AI Task entity"
+        },
+        "data_description": {
+          "notify_service": "The notify.* service used to send approval prompts from the steward.",
+          "ai_task_entity": "The ai_task.* entity used by the steward for reasoning passes."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Abode AI Autonomy Steward Config is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Abode AI Autonomy Steward Config",
+        "description": "Update the notification service and AI Task entity for the steward.",
+        "data": {
+          "notify_service": "Notify service",
+          "ai_task_entity": "AI Task entity"
+        },
+        "data_description": {
+          "notify_service": "The notify.* service used to send approval prompts from the steward.",
+          "ai_task_entity": "The ai_task.* entity used by the steward for reasoning passes."
+        }
+      }
+    }
+  }
+}

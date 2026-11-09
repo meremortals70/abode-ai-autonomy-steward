@@ -15,9 +15,11 @@ This App's own options have no entity/service selector type, so
 `notify_service` and the AI Task entity are **not** configured here.
 Install and configure `custom_components/abode_ai_autonomy_steward_config`
 first (Settings → Devices & Services → Add Integration → search
-"Abode AI Autonomy Steward Config") - it provides real entity/service pickers
-validated against your actual HA data, and exposes the result as
-`sensor.abode_ai_autonomy_steward_config`, which this App reads.
+"Abode AI Autonomy Steward Config"; on Home Assistant 2026.11.0+ you can
+also add this repository in the Marketplace) - it provides real entity/service
+pickers validated against your actual HA data, exposes the result as
+`sensor.abode_ai_autonomy_steward_config`, and registers LLM tools so Assist
+and MCP clients can inspect the steward or ask it to re-evaluate the home.
 
 ## What it does
 
@@ -63,7 +65,8 @@ away is you editing `constraints.yaml` directly.
 ## Status
 
 Second build. First build wrongly used a fixed polling interval;
-corrected to genuine event-driven wake. Unexercised in production either
-way. Frigate and Tara are not yet wired in as input sources, but the code
-is structured so adding them later doesn't require redesigning the
-reasoning loop.
+corrected to genuine event-driven wake. Companion integration updated for
+the Home Assistant 2026.11.0 Marketplace and 2026.10.0 LLM Tool API.
+Unexercised in production either way. Frigate and Tara are not yet wired
+in as input sources, but the code is structured so adding them later
+doesn't require redesigning the reasoning loop.

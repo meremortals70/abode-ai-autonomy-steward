@@ -3,26 +3,42 @@ the two fields that reference live HA data (notify service, AI Task
 entity), since the App's own options schema has no entity type. Same
 reasoning that justified the original companion integration, this time
 for the right two fields instead of a watched_entities list that no
-longer exists."""
+longer exists.
 
-import voluptuous as vol
+Uses Probatio for the form schema, as required by the Home Assistant
+2026.11.0 form API.
+"""
+
+import probatio
 from homeassistant import config_entries
 from homeassistant.helpers import selector
 
 from .const import DOMAIN, CONF_NOTIFY_SERVICE, CONF_AI_TASK_ENTITY
 
 
-def _schema(defaults: dict) -> vol.Schema:
-    return vol.Schema(
+def _schema(defaults: dict) -> probatio.Schema:
+    notify_default = defaults.get(CONF_NOTIFY_SERVICE)
+    ai_task_default = defaults.get(CONF_AI_TASK_ENTITY)
+
+    notify_field: probatio.Required | probatio.Optional = (
+        probatio.Required(CONF_NOTIFY_SERVICE, default=notify_default)
+        if notify_default is not None
+        else probatio.Required(CONF_NOTIFY_SERVICE)
+    )
+    ai_task_field: probatio.Required | probatio.Optional = (
+        probatio.Required(CONF_AI_TASK_ENTITY, default=ai_task_default)
+        if ai_task_default is not None
+        else probatio.Required(CONF_AI_TASK_ENTITY)
+    )
+
+    return probatio.Schema(
         {
-            vol.Required(
-                CONF_NOTIFY_SERVICE,
-                default=defaults.get(CONF_NOTIFY_SERVICE, vol.UNDEFINED),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="notify")),
-            vol.Required(
-                CONF_AI_TASK_ENTITY,
-                default=defaults.get(CONF_AI_TASK_ENTITY, vol.UNDEFINED),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="ai_task")),
+            notify_field: selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="notify")
+            ),
+            ai_task_field: selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="ai_task")
+            ),
         }
     )
 

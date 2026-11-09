@@ -52,10 +52,11 @@ removed by editing `constraints.yaml` directly, outside the running app.
 
 1. Install the companion integration: copy
    `custom_components/abode_ai_autonomy_steward_config` into your HA `config/
-   custom_components/` folder (or via HACS custom repository), restart HA,
-   then Settings → Devices & Services → Add Integration → search
-   "Abode AI Autonomy Steward Config" → select your real `notify.*` service and
-   your real `ai_task.*` entity.
+   custom_components/` folder (or add this repository in the Home Assistant
+   Marketplace under Settings > Marketplace), restart HA, then Settings →
+   Devices & Services → Add Integration → search "Abode AI Autonomy Steward
+   Config" → select your real `notify.*` service and your real `ai_task.*`
+   entity.
 2. Install the App: Settings → Add-ons → Add-on Store → ⋮ → Repositories
    → add this repo's URL → find **Abode AI Autonomy Steward** → Install.
 3. Configuration tab → confirm `min_confidence` (default 0.70) - this is
@@ -72,19 +73,35 @@ removed by editing `constraints.yaml` directly, outside the running app.
 | `ai_task_entity` | Companion integration (entity selector) | Real `ai_task.*` entity used for reasoning passes |
 | `min_confidence` | App options | Won't act or propose below this confidence (0-1) |
 
+## LLM tools (Home Assistant 2026.10.0+)
+
+The companion integration registers three LLM tools that are available to
+Assist and the MCP server:
+
+- `abode_ai_autonomy_steward_config__get_configuration` - returns the
+  configured `notify_service` and `ai_task_entity`.
+- `abode_ai_autonomy_steward_config__explain_charter` - returns the
+  steward's charter, boundaries, and approval protocol.
+- `abode_ai_autonomy_steward_config__trigger_reasoning` - asks the App to
+  wake and run a reasoning pass immediately.
+
+These tools use the Home Assistant 2026.10.0 LLM Tool API, returning
+`llm.ToolResult` and declaring their integration domain and annotations.
+
 ## Status
 
 Second build. First build wrongly used a fixed polling interval; corrected
-to genuine event-driven wake per the settled architecture. Unexercised in
-production either way. Frigate and Tara are not yet wired in as input
+to genuine event-driven wake per the settled architecture. Companion
+integration updated for the Home Assistant 2026.11.0 Marketplace and
+2026.10.0 LLM Tool API. Frigate and Tara are not yet wired in as input
 sources - the code is structured so they can be added later without
+redesigning the reasoning loop.
 
 ## Credits
 
 Designed and directed by Jason Wienert (Mere Mortals Consulting).
 Implementation, research and code written in collaboration with
 Claude (Anthropic).
-redesigning the reasoning loop.
 
 ## License
 
