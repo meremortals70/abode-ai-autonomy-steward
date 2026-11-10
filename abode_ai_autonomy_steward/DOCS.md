@@ -54,6 +54,17 @@ Nothing in the running system can ever remove a constraint once added -
 that file only grows stricter over time. The only way a constraint goes
 away is you editing `constraints.yaml` directly.
 
+## The household charter
+
+The steward's purpose, boundaries, and approval protocol live in
+`charter.md`, seeded to `/data/charter.md` on first run. You can append
+your own household rules to that file - "never announce to the baby's
+room", for example - and the steward reads the whole file as its
+instructions. Your additions take effect on the next reasoning pass.
+
+The constraint layer stays the hard, always-wrong prohibitions (alarm,
+lock). The charter is where the household's own values live.
+
 ## Configuration
 
 | Field | Where it's set | Description |

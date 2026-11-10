@@ -24,3 +24,7 @@ handover) and the running code. A number marked "Superseded" is no longer in for
 | [D015](D015.md) | The companion integration exposes LLM tools for config, charter, and triggering a pass |
 | [D016](D016.md) | Perception sources are pluggable: Home Assistant now, Frigate and Tara later |
 | [D017](D017.md) | A quiet home is correct: when nothing is warranted, the steward does nothing |
+| [D018](D018.md) | The steward executes the parameters the model supplied, parsed strictly, and never invents its own |
+| [D019](D019.md) | An approval or Never is honoured only with the single-use nonce of a pending proposal |
+| [D020](D020.md) | Every action decision and its outcome is appended to an append-only decision log |
+| [D021](D021.md) | The charter is a household-extendable data file, seeded and read fresh each pass |

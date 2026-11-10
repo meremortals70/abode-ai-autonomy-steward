@@ -22,6 +22,9 @@ System 2 in the autonomous home: continuous, stateless, goal-level reasoning tha
 abode_ai_autonomy_steward/               # the App (Supervisor-managed container)
   abode_ai_autonomy_steward.py           #   event-driven reasoning loop (System 2)
   constraint_layer.py                    #   append-only constraint engine
+  decision_log.py                        #   append-only decision log
+  charter.py                             #   charter loader (seed + read)
+  charter.md                             #   shipped charter, seeded to /data
   config.yaml                            #   App options — min_confidence only
   constraints.yaml                       #   shipped charter defaults (seed)
   Dockerfile                             #   App image
@@ -48,6 +51,11 @@ LICENSE
 docs/
   architecture.md                        # full design specification
   decisions/                             # design rules D000–Dnnn
+
+tests/
+  test_constraint_layer.py               # constraint matching + append-only
+  test_decision_log.py                   # decision log append + order
+  test_charter.py                        # charter seed + append semantics
 ```
 
 ## Layer rules
@@ -66,7 +74,7 @@ docs/
 3. App subscribes to HA event stream; on any event it debounces for `DEBOUNCE_SECONDS`.
 4. After debounce, App fetches complete state snapshot.
 5. App calls the configured `ai_task.*` service with the state snapshot and charter.
-6. AI returns a structured decision: `action_needed`, `action_kind`, `action_type`, `service`, `target_entity`, `reasoning`, `confidence`.
+6. AI returns a structured decision: `action_needed`, `action_kind`, `action_type`, `service`, `target_entity`, `service_data`, `reasoning`, `confidence`.
 7. If confidence < `MIN_CONFIDENCE`, do nothing.
 8. Constraint layer checks `is_blocked(service, target_entity, action_type)`.
 9. If blocked, log and do nothing.
@@ -81,6 +89,8 @@ docs/
 - **Determinism:** Constraint layer has no model, no randomness, no external state except the YAML file.
 - **Safety:** Every execution, including already-approved actions, passes the constraint layer.
 - **Minimal options:** Only `min_confidence` is configured in the App. Entity/service selectors live in the companion integration.
+- **Decision trace:** Every action decision and its outcome is appended to an append-only log (`decision_log.py`), so the steward's behaviour is auditable after the fact.
+- **Approval nonce:** An approval or Never is honoured only with the single-use nonce of a pending proposal.
 - **Extensibility:** Frigate and Tara perception inputs are not yet wired in, but the reasoning loop is structured to accept them later.
 
 ## Decisions
@@ -93,6 +103,9 @@ The numbered design rules are in `docs/decisions/`. A short summary:
 | D010 | Append-only constraints |
 | D003 | Stateless, complete-state passes |
 | D013 | Companion integration for selectors |
+| D018 | Execute the model's service parameters, parsed strictly |
+| D019 | Approvals bound to a single-use proposal nonce |
+| D020 | Append-only decision log |
 
 ## Known issues / next work
 

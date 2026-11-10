@@ -36,6 +36,9 @@ what the model decides.
 abode_ai_autonomy_steward/                  # the App (Supervisor-managed container)
   abode_ai_autonomy_steward.py              #   event-driven reasoning loop (System 2)
   constraint_layer.py                       #   append-only constraint engine
+  decision_log.py                           #   append-only decision log
+  charter.py                                #   charter loader (seed + read)
+  charter.md                                #   shipped charter, seeded to /data
   config.yaml                               #   App options — min_confidence only
   constraints.yaml                          #   shipped charter defaults (seed)
   Dockerfile                                #   App image (ghcr.io/home-assistant/base)
@@ -62,6 +65,11 @@ LICENSE
 docs/
   architecture.md                           # this document
   decisions/                                # design rules D000–Dnnn
+
+tests/
+  test_constraint_layer.py                  #   constraint matching + append-only
+  test_decision_log.py                      #   decision log append + order
+  test_charter.py                           #   charter seed + append semantics
 ```
 
 ## Layer rules
@@ -84,6 +92,16 @@ docs/
 6. **The App's own options are minimal.** Only `min_confidence` (a plain
    float) lives in the App; entity/service references belong in the companion.
 
+## The charter
+
+The steward's purpose, boundaries, and approval protocol are prose, not
+code. They ship as `charter.md` and are seeded to `/data/charter.md` on
+first run (`charter.seed_if_absent()`). The household appends their own
+rules to that file, and the steward reads the whole document fresh on every
+pass (`charter.load()`), so household-specific rules take effect on the next
+reasoning pass without a restart or a code change. The shipped file is a
+seed, never the source of truth once `/data/charter.md` exists.
+
 ## The reasoning pass
 
 The loop is a reactive control loop: sense fresh, decide, act or propose,
@@ -101,9 +119,10 @@ repeat. It is event-driven, not scheduled.
 4. On a pass, `_reason()` gathers the complete state snapshot via
    `gather_state()`, which fans out to pluggable sources — `_source_ha_state`
    today, `_source_frigate` and `_source_tara` returning `None` until wired.
-5. It builds the instructions: the `CHARTER`, the list of already-approved
-   action types, and the full state snapshot, and calls
-   `ai_task.generate_data` with the `DECISION_STRUCTURE` schema.
+5. It builds the instructions: the charter (loaded fresh from
+   `/data/charter.md`), the list of already-approved action types, and the
+   full state snapshot, and calls `ai_task.generate_data` with the
+   `DECISION_STRUCTURE` schema.
 6. The AI returns a structured decision; `_handle_decision()` applies the gates
    in order: `action_needed` → `confidence` ≥ `MIN_CONFIDENCE` → complete
    fields → constraint layer → approved/revise/propose.
@@ -120,6 +139,7 @@ The AI is asked to return exactly these fields (`DECISION_STRUCTURE`):
 | `replaces_action_type` | When revising, the existing type this replaces |
 | `service` | Home Assistant service, e.g. `light.turn_on` |
 | `target_entity` | The `entity_id` the service targets |
+| `service_data` | JSON object of service-call parameters, or empty for none |
 | `reasoning` | One sentence explaining the decision |
 | `confidence` | 0 to 1 |
 
@@ -139,9 +159,14 @@ persisted to `/data/approved_action_types.json`.
   approved type and goes through the same approval step; approving it replaces
   the old type.
 
+Each proposal carries a single-use nonce. A response is honoured only if its
+nonce matches a pending proposal; the nonce is consumed on first use, so an
+old, replayed, or forged response is ignored.
+
 The three responses (`handle_notification_action()`):
 
-- **Approve** — records the type and executes the service once.
+- **Approve** — records the type and executes the service once, with the
+  proposal's parameters.
 - **Deny** — declines this proposal only.
 - **Never** — appends a permanent constraint for that exact
   `service`/`target_entity`/`action_type` via `add_never_rule()`.
@@ -161,6 +186,15 @@ on first run only, never overwriting a file the resident has since appended to.
 Before starting, `_require_constraints()` refuses to run with zero rules: a
 System 2 that reasons and acts with no enforced boundary is a worse outcome
 than one that does not start.
+
+## The decision log
+
+`decision_log.py` keeps the audit trail the constraint layer lacks: every
+action decision is appended as one JSON line to `/data/decision_log.jsonl`,
+recording the `action_type`, `service`, `target`, `reasoning`, `confidence`,
+and the outcome (`executed`, `proposed`, `blocked`, `below_confidence`,
+`discarded_incomplete`), plus approvals and `Never` responses. It is
+append-only; nothing removes or edits an entry.
 
 ## Configuration
 
@@ -184,35 +218,35 @@ Assistant's LLM surface. It registers three tools
 
 - `abode_ai_autonomy_steward_config__get_configuration` — returns the
   configured `notify_service` and `ai_task_entity`.
-- `abode_ai_autonomy_steward_config__explain_charter` — returns the charter,
-  boundaries, and approval protocol.
+- `abode_ai_autonomy_steward_config__explain_charter` — returns a summary of
+  the steward's purpose, approval protocol, and the constraint layer; the
+  full charter is the household-extendable `/data/charter.md`.
 - `abode_ai_autonomy_steward_config__trigger_reasoning` — fires the trigger
   event that asks the App to wake and run a pass immediately.
 
 These are available to Assist and MCP clients. The first two are read-only;
 the third is idempotent and not destructive.
 
-## Security model and known gaps
+## Security model
 
-The design's safety comes from the constraint layer being outside the model.
-The following gaps are known and unaddressed in the current build:
+The design's safety comes from the constraint layer being outside the model,
+and from approvals being bound to single-use nonces, so a response that was
+not issued for the current proposal is ignored.
 
-1. **Approvals are unauthenticated.** `S2_APPROVE::` and `S2_NEVER::` arrive as
-   `mobile_app_notification_action` events; any code that can fire an event on
-   the HA bus can approve an action or append a constraint. There is no
-   per-proposal nonce or origin check.
-2. **Services are called with no parameters.** The decision structure has no
-   `service_data` field, so execution calls the service with empty data —
-   anything requiring an argument (brightness, message text, a delay) is out of
-   reach.
-3. **The charter is only partly enforced deterministically.** The charter's
-   BOUNDARIES list screens, whole-home visibility at night, and costly or
-   irreversible actions, but `constraints.yaml` only encodes alarm and lock
-   guards. The rest rely on the model "never knowingly proposing" them.
-4. **No decision trace.** Approved types are persisted, but there is no
-   append-only record of what was decided and why — the audit trail an
-   autonomous system needs for explainability is not yet present.
-5. **No tests.** The matching logic and debounce have no test suite.
+The charter draws an explicit line between two kinds of boundary:
+
+- **Hard prohibitions**, enforced deterministically by the constraint layer:
+  disarming an alarm, unlocking a door, and any rule a resident adds by
+  tapping **Never**. These are always wrong, so a stateless layer can enforce
+  them.
+- **Conditional boundaries**, honoured by the model in its own reasoning:
+  inappropriate content on screens, whole-home visibility at night without
+  evidence of an intruder, flagging costly or irreversible actions, and
+  treating children or vulnerable residents differently. These depend on
+  live state and intent, so only the model can judge them.
+
+This split is deliberate: a stateless constraint layer can enforce only what
+is always wrong, never what is conditionally wrong.
 
 ## Not yet verified
 
