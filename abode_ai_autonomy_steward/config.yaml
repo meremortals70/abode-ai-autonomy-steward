@@ -1,5 +1,5 @@
 name: "Abode AI Autonomy Steward"
-version: "0.5.0"
+version: "0.5.1"
 slug: "abode_ai_autonomy_steward"
 description: "A Home Assistant App that continuously reasons about your home's current state, proposes actions for one-time approval, then acts autonomously - bounded by an append-only constraint layer that only ever grows stricter. REQUIRES the companion 'Abode AI Autonomy Steward Config' integration (installed separately) to be configured first - see DOCS.md."
 url: "https://github.com/meremortals70/abode-ai-autonomy-steward"
