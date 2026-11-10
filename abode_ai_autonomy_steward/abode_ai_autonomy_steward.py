@@ -26,15 +26,18 @@ integration's UI updates this app live.
 
 import asyncio
 import json
-import os
 import logging
+import os
+import secrets
 import sys
 import time
 from pathlib import Path
 
 import aiohttp
 
+import charter
 import constraint_layer
+import decision_log
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOGGER = logging.getLogger("abode_ai_autonomy_steward")
@@ -48,49 +51,8 @@ TRIGGER_EVENT = "abode_ai_autonomy_steward_config.trigger_reasoning"
 MIN_CONFIDENCE = float(os.environ.get("MIN_CONFIDENCE", "0.70"))
 DEBOUNCE_SECONDS = 5  # coalesces a burst of simultaneous events into one reasoning pass - not a schedule, see module docstring
 
-CHARTER = """
-PURPOSE
-
-You perceive the current, complete state of this home on every reasoning
-pass - not what changed, the whole picture, fresh each time. Your job is
-to notice things a resident would want handled, and either act (if
-already approved) or propose (if new).
-
-You exist to make residents' lives easier. If nothing currently warrants
-action, say so and do nothing. A quiet home is a correct outcome.
-
-Some inputs may be unavailable on a given pass (e.g. Frigate or Tara not
-yet connected). Reason from whatever you're given; do not assume missing
-inputs mean something is wrong.
-
-BOUNDARIES
-
-The charter's boundaries are enforced by a separate, deterministic
-constraint layer outside your control - it will block anything that
-crosses a known boundary regardless of what you decide. You should still
-never knowingly propose crossing one: never cast inappropriate content to
-a shared screen, never make the whole home maximally visible/audible at
-night without evidence of an intruder or emergency, never touch alarm or
-lock state in a way that could trap or endanger a resident, never propose
-a costly or irreversible action without flagging the cost/irreversibility
-explicitly in your reasoning, never treat a child or vulnerable resident
-differently without a guardian's explicit approval. When uncertain,
-propose rather than act.
-
-APPROVAL PROTOCOL
-
-1. Decide what KIND of action this is - a short, stable action_type name
-   for the class of situation and response, not this one instance.
-2. If not yet approved: propose it, name it, state your reasoning in one
-   sentence, describe the specific action. Do not act.
-3. If already approved: decide fresh, every time, whether this specific
-   moment actually calls for it before acting.
-4. Never generalize an approval beyond what was granted.
-5. You may propose retiring or replacing an approved action_type if you
-   judge a better approach exists - set action_kind to
-   "revise_approved_type". This goes through the same approval step.
-6. If nothing is warranted, set action_needed false.
-"""
+# The charter is prose, not code: it lives in charter.md (seeded to
+# /data/charter.md, household-extendable) and is loaded via charter.load().
 
 DECISION_STRUCTURE = {
     "action_needed": {"description": "Whether an action should be taken right now", "required": True, "selector": {"boolean": None}},
@@ -99,6 +61,7 @@ DECISION_STRUCTURE = {
     "replaces_action_type": {"description": "If revising, the existing type this replaces", "selector": {"text": None}},
     "service": {"description": "HA service to call, e.g. light.turn_on", "selector": {"text": None}},
     "target_entity": {"description": "The entity_id the service should target", "selector": {"text": None}},
+    "service_data": {"description": "JSON object of service call parameters, or empty for none", "selector": {"text": None}},
     "reasoning": {"description": "One sentence explaining the decision", "selector": {"text": None}},
     "confidence": {"description": "Confidence from 0 to 1", "selector": {"number": {"min": 0, "max": 1, "step": 0.01}}},
 }
@@ -118,11 +81,33 @@ def _save_approved(approved: dict) -> None:
     DATA_PATH.write_text(json.dumps(approved, indent=2))
 
 
+def _parse_service_data(raw) -> dict:
+    """Return the service-call parameters from the model's service_data field.
+
+    The model returns service_data as either a dict or a JSON string (the
+    decision structure types it as text). Anything unparseable is treated as
+    no parameters, so a bad value can never be executed.
+    """
+    if raw in (None, ""):
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            LOGGER.warning("Unparseable service_data, ignoring: %r", raw)
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 class AIAutonomySteward:
     def __init__(self):
         self.approved_types: dict = _load_approved()
         self._msg_id = 0
         self._pending = {}
+        self._pending_proposals: dict = {}
         self.ws = None
 
         # Populated from sensor.abode_ai_autonomy_steward_config - see _apply_config.
@@ -207,7 +192,7 @@ class AIAutonomySteward:
             if self.approved_types else "(none yet)"
         )
         instructions = (
-            f"{CHARTER}\n\n"
+            f"{charter.load()}\n\n"
             f"Already-approved action types: {json.dumps(approved_summary)}\n\n"
             f"Current complete state: {json.dumps(snapshot, default=str)}\n\n"
             "Decide, per the charter above, whether an autonomous action is warranted right now."
@@ -240,34 +225,44 @@ class AIAutonomySteward:
     async def _handle_decision(self, data: dict):
         if not data.get("action_needed"):
             return
-        if float(data.get("confidence", 0) or 0) < MIN_CONFIDENCE:
-            LOGGER.info("Below confidence floor: %s", data.get("reasoning", ""))
-            return
 
         action_type = data.get("action_type", "")
         service = data.get("service", "")
         target = data.get("target_entity", "")
+        reasoning = data.get("reasoning", "")
+        confidence = data.get("confidence", 0) or 0
+
+        if float(confidence) < MIN_CONFIDENCE:
+            LOGGER.info("Below confidence floor: %s", reasoning)
+            decision_log.append({"kind": "decision", "outcome": "below_confidence", "action_type": action_type, "service": service, "target": target, "reasoning": reasoning, "confidence": confidence})
+            return
 
         if not (action_type and service and target):
             LOGGER.warning("Incomplete decision, discarding: %s", data)
+            decision_log.append({"kind": "decision", "outcome": "discarded_incomplete", "action_type": action_type, "service": service, "target": target, "reasoning": reasoning, "confidence": confidence})
             return
+
+        service_data = _parse_service_data(data.get("service_data"))
 
         blocked, why = constraint_layer.is_blocked(service, target, action_type)
         if blocked:
             LOGGER.error("Blocked by constraint layer: %s (attempted: %s -> %s)", why, service, target)
+            decision_log.append({"kind": "decision", "outcome": "blocked", "reason": why, "action_type": action_type, "service": service, "target": target, "reasoning": reasoning, "confidence": confidence})
             return
 
         is_revision = data.get("action_kind") == "revise_approved_type"
 
         if not is_revision and action_type in self.approved_types:
             LOGGER.info("Executing pre-approved '%s': %s -> %s", action_type, service, target)
+            decision_log.append({"kind": "decision", "outcome": "executed", "action_type": action_type, "service": service, "target": target, "reasoning": reasoning, "confidence": confidence})
             domain, svc = service.split(".", 1)
-            await self.call_service(domain, svc, {}, target={"entity_id": target})
+            await self.call_service(domain, svc, service_data, target={"entity_id": target})
             return
 
-        await self._propose(data, is_revision)
+        decision_log.append({"kind": "decision", "outcome": "proposed", "action_type": action_type, "service": service, "target": target, "reasoning": reasoning, "confidence": confidence})
+        await self._propose(data, is_revision, service_data)
 
-    async def _propose(self, data: dict, is_revision: bool):
+    async def _propose(self, data: dict, is_revision: bool, service_data: dict):
         if not self.notify_service:
             LOGGER.warning("No notify_service configured yet - cannot request approval for: %s", data)
             return
@@ -278,8 +273,18 @@ class AIAutonomySteward:
         reasoning = data.get("reasoning", "")
         replaces = data.get("replaces_action_type", "") if is_revision else ""
 
-        approve_action = f"S2_APPROVE::{action_type}::{service}::{target}::{replaces}"
-        never_action = f"S2_NEVER::{action_type}::{service}::{target}"
+        nonce = secrets.token_urlsafe(16)
+        self._pending_proposals[nonce] = {
+            "action_type": action_type,
+            "service": service,
+            "target": target,
+            "replaces": replaces,
+            "service_data": service_data,
+        }
+
+        approve_action = f"S2_APPROVE::{nonce}"
+        deny_action = f"S2_DENY::{nonce}"
+        never_action = f"S2_NEVER::{nonce}"
 
         notify_domain, notify_svc = (
             self.notify_service.split(".", 1) if "." in self.notify_service else ("notify", self.notify_service)
@@ -291,27 +296,52 @@ class AIAutonomySteward:
                 "message": reasoning or f"Proposing: {action_type}",
                 "data": {"actions": [
                     {"action": approve_action, "title": "Approve"},
-                    {"action": "S2_DENY", "title": "Deny"},
+                    {"action": deny_action, "title": "Deny"},
                     {"action": never_action, "title": "Never"},
                 ]},
             },
         )
 
     async def handle_notification_action(self, action: str) -> None:
-        if action.startswith("S2_APPROVE::"):
-            _, action_type, service, target, replaces = action.split("::")
+        if "::" not in action:
+            LOGGER.warning("Ignoring malformed notification action: %r", action)
+            return
+
+        kind, nonce = action.split("::", 1)
+        if kind not in ("S2_APPROVE", "S2_DENY", "S2_NEVER"):
+            LOGGER.warning("Ignoring unknown notification action kind: %r", kind)
+            return
+
+        proposal = self._pending_proposals.pop(nonce, None)
+        if proposal is None:
+            LOGGER.warning("Ignoring '%s' with an unknown or already-used nonce", kind)
+            return
+
+        action_type = proposal["action_type"]
+        service = proposal["service"]
+        target = proposal["target"]
+
+        if kind == "S2_DENY":
+            decision_log.append({"kind": "deny", "action_type": action_type, "service": service, "target": target})
+            LOGGER.info("Proposal denied")
+            return
+
+        replaces = proposal.get("replaces", "")
+        service_data = proposal.get("service_data", {})
+
+        if kind == "S2_APPROVE":
             if replaces:
                 self.approved_types.pop(replaces, None)
                 LOGGER.info("'%s' retired, replaced by '%s'", replaces, action_type)
             self.approved_types[action_type] = {"approved_at": time.time(), "description": service}
             _save_approved(self.approved_types)
+            decision_log.append({"kind": "approval", "action_type": action_type, "service": service, "target": target, "replaces": replaces})
             LOGGER.info("'%s' approved", action_type)
             domain, svc = service.split(".", 1)
-            await self.call_service(domain, svc, {}, target={"entity_id": target})
-
-        elif action.startswith("S2_NEVER::"):
-            _, action_type, service, target = action.split("::")
+            await self.call_service(domain, svc, service_data, target={"entity_id": target})
+        else:
             constraint_layer.add_never_rule(service, target, action_type, reasoning=f"Rejected: {action_type}")
+            decision_log.append({"kind": "never", "action_type": action_type, "service": service, "target": target})
             LOGGER.info("Constraint added: '%s' (%s -> %s) is now permanently forbidden", action_type, service, target)
 
     # ---- wake-on-change, with burst coalescing ----

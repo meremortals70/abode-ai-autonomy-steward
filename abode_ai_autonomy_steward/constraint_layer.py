@@ -19,7 +19,7 @@ CONSTRAINTS_PATH = Path("/data/constraints.yaml")
 """The live, append-only constraint file. Persists across App restarts."""
 
 SHIPPED_DEFAULTS = Path("/constraints.yaml")
-"""The charter defaults baked into the image by the Dockerfile.
+"""The constraint defaults baked into the image by the Dockerfile.
 
 These are a seed, not the source of truth. Once CONSTRAINTS_PATH exists it
 is never overwritten from here - it may hold "Never" rules appended by a
@@ -47,7 +47,7 @@ def seed_if_absent() -> None:
         return
 
     shutil.copyfile(SHIPPED_DEFAULTS, CONSTRAINTS_PATH)
-    LOGGER.info("Seeded %s from shipped charter defaults.", CONSTRAINTS_PATH)
+    LOGGER.info("Seeded %s from shipped constraint defaults.", CONSTRAINTS_PATH)
 
 
 def rule_count() -> int:
