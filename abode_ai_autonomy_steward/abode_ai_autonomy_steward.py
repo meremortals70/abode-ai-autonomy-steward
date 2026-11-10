@@ -38,6 +38,7 @@ import aiohttp
 import charter
 import constraint_layer
 import decision_log
+import wake_filter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOGGER = logging.getLogger("abode_ai_autonomy_steward")
@@ -115,6 +116,7 @@ class AIAutonomySteward:
         self.ai_task_entity: str = ""
 
         self._debounce_task: asyncio.Task | None = None
+        self.wake_filter = wake_filter.WakeFilter()
 
     def _next_id(self) -> int:
         self._msg_id += 1
@@ -384,9 +386,12 @@ class AIAutonomySteward:
 
                     # Any HA state change wakes the reasoning pass - actively
                     # waiting, not polling. A burst of changes coalesces via
-                    # the debounce above into a single pass. Logged per-entity
-                    # so noisy/high-frequency entities can be identified and
-                    # filtered, rather than guessed at.
+                    # the debounce above into a single pass. A single entity
+                    # that wakes the loop too often is auto-suppressed for a
+                    # cooldown, so no one noisy entity can drive reasoning
+                    # non-stop.
+                    if not self.wake_filter.should_wake(entity_id):
+                        continue
                     LOGGER.info("Wake trigger: %s changed to %s", entity_id, new_state_obj.get("state"))
                     self._schedule_reasoning_pass()
 

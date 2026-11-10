@@ -7,7 +7,11 @@
 # this file directly, outside the app.
 #
 # A proposed action is blocked if it matches every non-null field of any
-# entry below. Fields left out of an entry are wildcards.
+# entry below. Fields left out of an entry are wildcards. A rule may also
+# carry a `time_range` (start/end in HH:MM, local time) so a boundary
+# applies only within a time-of-day window; an overnight window is written
+# start > end, e.g. 21:00 -> 07:00. A rule's `except` block names a
+# carve-out: an action matching both `match` and `except` is not blocked.
 
 - id: charter-001
   added_at: "2026-07-30T00:00:00Z"
@@ -26,3 +30,17 @@
     out, without an action_type explicitly covering this exact scenario.
   match:
     service_prefix: "lock.unlock"
+
+- id: charter-003
+  added_at: "2026-11-10T00:00:00Z"
+  source: charter_default
+  description: >
+    No spoken announcements between 21:00 and 07:00 local time, except
+    alarms and emergencies.
+  match:
+    service_prefix: "tts."
+    time_range:
+      start: "21:00"
+      end: "07:00"
+  except:
+    action_type: "alarm_announcement"

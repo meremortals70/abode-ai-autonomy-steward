@@ -8,6 +8,7 @@ COPY constraint_layer.py /constraint_layer.py
 COPY decision_log.py /decision_log.py
 COPY charter.py /charter.py
 COPY charter.md /charter.md
+COPY wake_filter.py /wake_filter.py
 COPY constraints.yaml /constraints.yaml
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh

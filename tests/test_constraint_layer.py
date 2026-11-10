@@ -3,6 +3,7 @@
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -65,6 +66,34 @@ class ConstraintLayerTests(unittest.TestCase):
         blocked, why = constraint_layer.is_blocked("switch.turn_on", "switch.kettle", "unattended")
         self.assertTrue(blocked)
         self.assertIn("Rejected", why)
+
+    def test_time_range_matching(self):
+        _write(self.live_path, [
+            {"match": {"service_prefix": "tts.", "time_range": {"start": "21:00", "end": "07:00"}}},
+            {"match": {"service_prefix": "light.", "time_range": {"start": "09:00", "end": "17:00"}}},
+        ])
+
+        # Overnight window (21:00 -> 07:00): blocked at 22:00 and 03:00, allowed at 12:00.
+        self.assertTrue(constraint_layer.is_blocked("tts.speak", "media_player.x", "x", now=datetime(2026, 1, 1, 22, 0))[0])
+        self.assertTrue(constraint_layer.is_blocked("tts.speak", "media_player.x", "x", now=datetime(2026, 1, 1, 3, 0))[0])
+        self.assertFalse(constraint_layer.is_blocked("tts.speak", "media_player.x", "x", now=datetime(2026, 1, 1, 12, 0))[0])
+
+        # Daytime window (09:00 -> 17:00): blocked at 12:00, allowed at 20:00.
+        self.assertTrue(constraint_layer.is_blocked("light.turn_on", "light.x", "x", now=datetime(2026, 1, 1, 12, 0))[0])
+        self.assertFalse(constraint_layer.is_blocked("light.turn_on", "light.x", "x", now=datetime(2026, 1, 1, 20, 0))[0])
+
+    def test_except_carves_out_an_exception(self):
+        _write(self.live_path, [
+            {"match": {"service_prefix": "tts.", "time_range": {"start": "21:00", "end": "07:00"}},
+             "except": {"action_type": "alarm_announcement"}},
+        ])
+
+        # A casual announcement overnight is blocked.
+        self.assertTrue(constraint_layer.is_blocked("tts.speak", "media_player.x", "casual_announcement", now=datetime(2026, 1, 1, 23, 0))[0])
+        # An alarm announcement overnight is allowed.
+        self.assertFalse(constraint_layer.is_blocked("tts.speak", "media_player.x", "alarm_announcement", now=datetime(2026, 1, 1, 23, 0))[0])
+        # During the day, both are allowed (no time match).
+        self.assertFalse(constraint_layer.is_blocked("tts.speak", "media_player.x", "casual_announcement", now=datetime(2026, 1, 1, 12, 0))[0])
 
     def test_seed_if_absent_seeds_once_and_never_overwrites(self):
         _write(self.seed_path, [{"id": "seed-1", "match": {"service_prefix": "lock.unlock"}}])
