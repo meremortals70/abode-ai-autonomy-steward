@@ -39,8 +39,9 @@ abode_ai_autonomy_steward/                  # the App (Supervisor-managed contai
   decision_log.py                           #   append-only decision log
   charter.py                                #   charter loader (seed + read)
   charter.md                                #   shipped charter, seeded to /data
+  wake_filter.py                            #   auto-suppress noisy wake sources
   config.yaml                               #   App options — min_confidence only
-  constraints.yaml                          #   shipped charter defaults (seed)
+  constraints.yaml                          #   shipped constraint defaults (seed)
   Dockerfile                                #   App image (ghcr.io/home-assistant/base)
   run.sh                                    #   entrypoint — exports MIN_CONFIDENCE
   DOCS.md                                   #   App documentation
@@ -70,6 +71,7 @@ tests/
   test_constraint_layer.py                  #   constraint matching + append-only
   test_decision_log.py                      #   decision log append + order
   test_charter.py                           #   charter seed + append semantics
+  test_wake_filter.py                       #   noisy-entity auto-suppression
 ```
 
 ## Layer rules
@@ -127,6 +129,11 @@ repeat. It is event-driven, not scheduled.
    in order: `action_needed` → `confidence` ≥ `MIN_CONFIDENCE` → complete
    fields → constraint layer → approved/revise/propose.
 
+Separately, `wake_filter.py` auto-suppresses noisy entities: an entity that
+wakes the loop more than a burst threshold within a short window is silenced
+for a cooldown, so no single high-frequency entity can drive reasoning
+non-stop. Suppression is automatic and self-healing.
+
 ### The decision structure
 
 The AI is asked to return exactly these fields (`DECISION_STRUCTURE`):
@@ -178,10 +185,16 @@ target_entity, action_type)` returns whether a proposed action matches any
 rule in `constraints.yaml`.
 
 A rule matches when the action matches **every non-null field** of its `match`
-block; fields left out are wildcards. The shipped `constraints.yaml` seeds the
-layer with two charter defaults — never disarm an alarm, never unlock in a way
-that could trap a resident — and `seed_if_absent()` copies them into `/data`
-on first run only, never overwriting a file the resident has since appended to.
+block; fields left out are wildcards. A rule may also carry a `time_range`
+(`start`/`end` in `HH:MM`, local time), so a boundary applies only within a
+time-of-day window; an overnight window is written `start > end` (for example
+`21:00` → `07:00`). A rule may also carry an `except` block: an action
+matching both `match` and `except` is not blocked. The seeded
+`constraints.yaml` carries three defaults — never disarm an alarm, never
+unlock a door, and no spoken announcements between 21:00 and 07:00 (except
+alarms, signalled by `action_type` `alarm_announcement`). `seed_if_absent()`
+copies them into `/data` on first run only, never overwriting a file the
+resident has since appended to.
 
 Before starting, `_require_constraints()` refuses to run with zero rules: a
 System 2 that reasons and acts with no enforced boundary is a worse outcome
@@ -236,9 +249,10 @@ not issued for the current proposal is ignored.
 The charter draws an explicit line between two kinds of boundary:
 
 - **Hard prohibitions**, enforced deterministically by the constraint layer:
-  disarming an alarm, unlocking a door, and any rule a resident adds by
-  tapping **Never**. These are always wrong, so a stateless layer can enforce
-  them.
+  disarming an alarm, unlocking a door, spoken announcements overnight
+  (except alarms), and any rule a resident adds by tapping **Never**. These
+  are always wrong (or always wrong within a time window), so a stateless
+  layer can enforce them.
 - **Conditional boundaries**, honoured by the model in its own reasoning:
   inappropriate content on screens, whole-home visibility at night without
   evidence of an intruder, flagging costly or irreversible actions, and

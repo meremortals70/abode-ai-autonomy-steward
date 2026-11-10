@@ -25,8 +25,9 @@ abode_ai_autonomy_steward/               # the App (Supervisor-managed container
   decision_log.py                        #   append-only decision log
   charter.py                             #   charter loader (seed + read)
   charter.md                             #   shipped charter, seeded to /data
+  wake_filter.py                         #   auto-suppress noisy wake sources
   config.yaml                            #   App options — min_confidence only
-  constraints.yaml                       #   shipped charter defaults (seed)
+  constraints.yaml                       #   shipped constraint defaults (seed)
   Dockerfile                             #   App image
   run.sh                                 #   entrypoint — exports MIN_CONFIDENCE
   DOCS.md                                #   App documentation
@@ -56,6 +57,7 @@ tests/
   test_constraint_layer.py               # constraint matching + append-only
   test_decision_log.py                   # decision log append + order
   test_charter.py                        # charter seed + append semantics
+  test_wake_filter.py                    # noisy-entity auto-suppression
 ```
 
 ## Layer rules
@@ -106,6 +108,11 @@ The numbered design rules are in `docs/decisions/`. A short summary:
 | D018 | Execute the model's service parameters, parsed strictly |
 | D019 | Approvals bound to a single-use proposal nonce |
 | D020 | Append-only decision log |
+| D021 | Charter as household-extendable data |
+| D022 | Auto-suppress noisy wake sources |
+| D023 | Time-of-day constraint windows |
+| D024 | No spoken announcements 21:00–07:00, except alarms |
+| D025 | Constraints can name an exception (`except`) |
 
 ## Known issues / next work
 

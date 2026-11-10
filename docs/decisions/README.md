@@ -28,3 +28,7 @@ handover) and the running code. A number marked "Superseded" is no longer in for
 | [D019](D019.md) | An approval or Never is honoured only with the single-use nonce of a pending proposal |
 | [D020](D020.md) | Every action decision and its outcome is appended to an append-only decision log |
 | [D021](D021.md) | The charter is a household-extendable data file, seeded and read fresh each pass |
+| [D022](D022.md) | The steward auto-suppresses an entity that wakes it too often, for a cooldown |
+| [D023](D023.md) | A constraint may be scoped to a time-of-day window (`time_range`) |
+| [D024](D024.md) | No spoken announcements 21:00–07:00, except alarms and emergencies |
+| [D025](D025.md) | A constraint may name an exception (`except`), so a boundary can carry a narrow carve-out |

@@ -54,6 +54,14 @@ Nothing in the running system can ever remove a constraint once added -
 that file only grows stricter over time. The only way a constraint goes
 away is you editing `constraints.yaml` directly.
 
+The shipped rules already block: disarming an alarm, unlocking a door,
+and spoken announcements between 21:00 and 07:00 (alarms and emergencies
+are the one exception).
+
+If a single entity changes so often that it would keep the steward
+reasoning non-stop, the steward detects it and suppresses that entity for
+a few minutes automatically - a quiet entity wakes normally again after.
+
 ## The household charter
 
 The steward's purpose, boundaries, and approval protocol live in
