@@ -88,6 +88,12 @@ Assist and the MCP server:
 These tools use the Home Assistant 2026.10.0 LLM Tool API, returning
 `llm.ToolResult` and declaring their integration domain and annotations.
 
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) - the architecture at a glance.
+- [docs/architecture.md](docs/architecture.md) - the full design specification.
+- [docs/decisions/](docs/decisions/) - the numbered design rules (D000-Dnnn).
+
 ## Status
 
 Second build. First build wrongly used a fixed polling interval; corrected
