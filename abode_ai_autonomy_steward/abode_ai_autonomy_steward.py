@@ -1,8 +1,9 @@
 """
 Abode AI Autonomy Steward - continuous, stateless, goal-level reasoning.
-System 2 in the four-layer architecture (System 0: perception, System 1:
-fast deterministic automations, System 2: this app, plus an independent
-constraint layer gating everything System 2 proposes).
+System 2 (the Steward) in the five-component architecture: Senses
+(perception), Reflex (fast deterministic automations), Vigil (domain-scoped
+salience), the Steward (this app), and the Ward (the independent constraint
+layer gating everything the Steward proposes).
 
 Trigger model, corrected 30 Jul 2026: NOT a polling timer, NOT a schedule.
 This app subscribes to HA's event stream and stays blocked, actively
@@ -51,6 +52,22 @@ TRIGGER_EVENT = "abode_ai_autonomy_steward_config.trigger_reasoning"
 
 MIN_CONFIDENCE = float(os.environ.get("MIN_CONFIDENCE", "0.70"))
 DEBOUNCE_SECONDS = 5  # coalesces a burst of simultaneous events into one reasoning pass - not a schedule, see module docstring
+
+# State snapshot budget. The steward reasons over the current picture of the
+# home, but the model's context window is finite, so the snapshot is trimmed
+# to the most relevant entities. Domains the steward may act on are always
+# kept first; entities whose state is a boring default are dropped first.
+ACTIONABLE_DOMAINS = {
+    "light", "switch", "climate", "cover", "lock", "media_player", "fan",
+    "humidifier", "vacuum", "alarm_control_panel", "water_heater", "scene",
+    "script", "input_boolean", "input_number", "input_select", "timer",
+    "counter",
+}
+_BORING_STATES = {
+    "off", "closed", "locked", "idle", "standby", "paused",
+    "unknown", "unavailable", "disarmed", "0", "",
+}
+MAX_STATE_CHARS = 60000  # ~15k tokens; leaves room in a 24k window for charter + reply
 
 # The charter is prose, not code: it lives in charter.md (seeded to
 # /data/charter.md, household-extendable) and is loaded via charter.load().
@@ -162,7 +179,37 @@ class AIAutonomySteward:
     async def _source_ha_state(self) -> dict:
         result = await self._send({"type": "get_states"})
         states = (result.get("result") or [])
-        return {"ha_entities": {s["entity_id"]: s.get("state") for s in states}}
+
+        # Most recently changed first, then stable-sort so actionable domains
+        # and non-default states are kept and boring ones are trimmed first.
+        ordered = sorted(states, key=lambda s: s.get("last_changed", ""), reverse=True)
+        ordered.sort(key=lambda s: (
+            0 if s.get("entity_id", "").split(".", 1)[0] in ACTIONABLE_DOMAINS
+            else (1 if str(s.get("state")) not in _BORING_STATES else 2)
+        ))
+
+        snapshot = {}
+        total = 0
+        omitted = 0
+        for s in ordered:
+            entity_id = s.get("entity_id", "")
+            if not entity_id:
+                continue
+            entry = f"{entity_id}: {s.get('state')}\n"
+            if total + len(entry) > MAX_STATE_CHARS:
+                omitted += 1
+                continue
+            snapshot[entity_id] = s.get("state")
+            total += len(entry)
+
+        if omitted:
+            LOGGER.warning(
+                "State snapshot trimmed to %d chars; %d entities omitted to fit the model context window.",
+                MAX_STATE_CHARS, omitted,
+            )
+            return {"ha_entities": snapshot, "_note": f"{omitted} entities omitted to fit the model's context window"}
+
+        return {"ha_entities": snapshot}
 
     async def _source_frigate(self) -> dict | None:
         # Not wired yet - Frigate does not exist on hapve as of 30 Jul 2026.
