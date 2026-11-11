@@ -91,8 +91,7 @@ These tools use the Home Assistant 2026.10.0 LLM Tool API, returning
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - the architecture at a glance.
-- [docs/architecture.md](docs/architecture.md) - the full design specification.
+- [docs/architecture.md](docs/architecture.md) - the architecture specification.
 - [docs/decisions/](docs/decisions/) - the numbered design rules (D000-Dnnn).
 
 ## Status
