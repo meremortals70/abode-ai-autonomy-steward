@@ -7,7 +7,7 @@ handover) and the running code. A number marked "Superseded" is no longer in for
 | Rule | What it says |
 | --- | --- |
 | [D000](D000.md) | The steward is System 2: continuous, goal-level reasoning over the whole home, not per-entity reaction |
-| [D001](D001.md) | The home is four layers: perception, deterministic automations, reasoning, and an independent constraint layer |
+| [D001](D001.md) | Five components in four ranks — Senses, Reflex + Vigil, Steward, the Ward — with six cross-cutting domains |
 | [D002](D002.md) | The steward wakes on events only — never a timer, never polling, never a per-entity watch-list |
 | [D003](D003.md) | Every pass pulls the complete current state fresh, not a delta and not an accumulated history |
 | [D004](D004.md) | Approval is per action_type, but the steward still re-decides fresh every pass |

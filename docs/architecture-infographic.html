@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Abode AI Autonomy - Architecture</title>
+<style>
+:root{color-scheme:light}body{font-family:"Segoe UI",system-ui,sans-serif;background:#f4f5f7;margin:0;padding:28px 16px 40px;color:#1f2937}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:26px;margin:0 0 6px;text-align:center}
+.sub{text-align:center;color:#4b5563;font-size:13.5px;margin-bottom:22px}
+.panel{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px 12px 6px;margin-bottom:20px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+.panel svg{width:100%;height:auto;display:block}
+.panel h2{font-size:14px;margin:0 0 6px;color:#374151;text-align:center;font-weight:700}
+.legend{text-align:center;font-size:12px;color:#6b7280;margin-top:2px;line-height:1.6}
+</style></head><body><div class="wrap">
+<h1>Abode AI Autonomy — Architecture</h1>
+<div class="sub">Five components, four ranks · six functional domains · the AI Engine as a shared substrate</div>
+<div class="panel"><h2>1 · The full stack</h2>
+<svg viewBox="0 0 1180 960" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <rect width="1180" height="960" fill="#ffffff"/>
+
+  <!-- Middleware boundary -->
+  <rect x="40" y="110" width="820" height="670" rx="16" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8,6"/>
+  <text x="64" y="142" font-size="15" font-weight="700" fill="#475569" letter-spacing="1">OUR MIDDLEWARE</text>
+
+  <!-- Level boundary lines -->
+  <line x1="55" y1="345" x2="845" y2="345" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="3,4"/>
+  <line x1="55" y1="510" x2="845" y2="510" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="3,4"/>
+  <text x="792" y="270" font-size="12" font-weight="700" fill="#94a3b8">LEVEL 3</text>
+  <text x="792" y="435" font-size="12" font-weight="700" fill="#94a3b8">LEVEL 2</text>
+  <text x="792" y="595" font-size="12" font-weight="700" fill="#94a3b8">LEVEL 1</text>
+
+  <!-- HA SERVICE CALLS : outside the middleware boundary, symmetric to Senses, spans both columns -->
+  <rect x="90" y="20" width="630" height="70" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="2" stroke-dasharray="5,4"/>
+  <text x="405" y="48" font-size="15" font-weight="700" text-anchor="middle" fill="#334155">HA SERVICE CALLS</text>
+  <text x="405" y="68" font-size="11" text-anchor="middle" fill="#334155">HA Core's own dispatch -</text>
+  <text x="405" y="82" font-size="11" text-anchor="middle" fill="#334155">outside our middleware, same as Senses</text>
+  <text x="660" y="45" font-size="12" font-weight="700" fill="#94a3b8">LEVEL 4</text>
+
+  <!-- the Ward : Level 3, aligned with Vigil/Steward column (x 440-720) -->
+  <rect x="440" y="215" width="280" height="100" rx="10" fill="#fef2f2" stroke="#b91c1c" stroke-width="2"/>
+  <text x="580" y="245" font-size="16" font-weight="700" text-anchor="middle" fill="#7f1d1d">the WARD</text>
+  <text x="580" y="266" font-size="12" text-anchor="middle" fill="#7f1d1d">gates every proposal</text>
+  <text x="580" y="283" font-size="12" text-anchor="middle" fill="#7f1d1d">against the constitution</text>
+  <text x="580" y="302" font-size="11" font-style="italic" text-anchor="middle" fill="#b91c1c">deterministic - no LLM call</text>
+
+  <!-- Steward : Level 2, same column -->
+  <rect x="440" y="380" width="280" height="90" rx="10" fill="#f5f3ff" stroke="#6d28d9" stroke-width="2"/>
+  <text x="580" y="410" font-size="16" font-weight="700" text-anchor="middle" fill="#4c1d95">STEWARD</text>
+  <text x="580" y="430" font-size="12" text-anchor="middle" fill="#4c1d95">slow, full reasoning</text>
+  <text x="580" y="446" font-size="12" text-anchor="middle" fill="#4c1d95">proposes actions</text>
+  <text x="580" y="462" font-size="11" font-style="italic" text-anchor="middle" fill="#6d28d9">calls the AI engine -&gt;</text>
+
+  <!-- Reflex + Vigil : Level 1, same rank, side by side -->
+  <rect x="90" y="540" width="280" height="130" rx="10" fill="#eff6ff" stroke="#1d4ed8" stroke-width="2"/>
+  <text x="230" y="570" font-size="16" font-weight="700" text-anchor="middle" fill="#1e3a8a">REFLEX</text>
+  <text x="230" y="588" font-size="12" text-anchor="middle" fill="#1e3a8a">zero reasoning</text>
+  <text x="230" y="604" font-size="12" text-anchor="middle" fill="#1e3a8a">deterministic trigger -&gt; action</text>
+  <text x="230" y="620" font-size="12" text-anchor="middle" fill="#1e3a8a">acts immediately, unchanged</text>
+  <text x="230" y="636" font-size="11" font-style="italic" text-anchor="middle" fill="#1e3a8a">no LLM call</text>
+  <text x="230" y="656" font-size="10" font-style="italic" text-anchor="middle" fill="#3b82f6">(six domains inside - see domain diagram)</text>
+
+  <rect x="440" y="540" width="280" height="130" rx="10" fill="#fffbeb" stroke="#b45309" stroke-width="2"/>
+  <text x="580" y="570" font-size="16" font-weight="700" text-anchor="middle" fill="#78350f">VIGIL</text>
+  <text x="580" y="588" font-size="12" text-anchor="middle" fill="#78350f">cheap, narrow, domain-scoped</text>
+  <text x="580" y="604" font-size="12" text-anchor="middle" fill="#78350f">judgment - decides what wakes</text>
+  <text x="580" y="620" font-size="12" text-anchor="middle" fill="#78350f">Steward. not yet built.</text>
+  <text x="580" y="636" font-size="11" font-style="italic" text-anchor="middle" fill="#b45309">calls the AI engine -&gt;</text>
+  <text x="580" y="656" font-size="10" font-style="italic" text-anchor="middle" fill="#d97706">(six domains inside - see domain diagram)</text>
+
+  <text x="405" y="695" font-size="12" font-style="italic" text-anchor="middle" fill="#64748b">same rank - both consume Senses directly, neither feeds the other</text>
+
+  <!-- Reflex bypass annotation - horizontal now, positioned clear of the middleware title -->
+  <text x="100" y="430" font-size="10.5" font-style="italic" fill="#1d4ed8">Reflex bypasses</text>
+  <text x="100" y="444" font-size="10.5" font-style="italic" fill="#1d4ed8">Steward and the Ward</text>
+  <text x="100" y="458" font-size="10.5" font-style="italic" fill="#1d4ed8">entirely</text>
+
+  <!-- SENSES : Level 0, outside the middleware boundary, widened to span both columns -->
+  <rect x="90" y="820" width="630" height="100" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="2" stroke-dasharray="5,4"/>
+  <text x="405" y="852" font-size="16" font-weight="700" text-anchor="middle" fill="#334155">SENSES</text>
+  <text x="405" y="872" font-size="12" text-anchor="middle" fill="#334155">Frigate, HA sensors - existing applications</text>
+  <text x="405" y="890" font-size="12" text-anchor="middle" fill="#334155">outside our middleware, supplied to it</text>
+  <text x="660" y="850" font-size="12" font-weight="700" fill="#94a3b8">LEVEL 0</text>
+
+  <!-- AI ENGINE : compute substrate, outside the middleware boundary, taller for text room -->
+  <rect x="900" y="360" width="240" height="330" rx="10" fill="#f5f5f4" stroke="#57534e" stroke-width="2" stroke-dasharray="5,4"/>
+  <text x="1020" y="395" font-size="16" font-weight="700" text-anchor="middle" fill="#292524">AI ENGINE</text>
+  <text x="1020" y="420" font-size="12" text-anchor="middle" fill="#292524">LXC 252 - Lemonade</text>
+  <text x="1020" y="438" font-size="12" text-anchor="middle" fill="#292524">Gemma-4-26B, GPU engine</text>
+  <text x="1020" y="462" font-size="11" font-style="italic" text-anchor="middle" fill="#57534e">shared compute substrate -</text>
+  <text x="1020" y="478" font-size="11" font-style="italic" text-anchor="middle" fill="#57534e">not a rank in the data flow,</text>
+  <text x="1020" y="494" font-size="11" font-style="italic" text-anchor="middle" fill="#57534e">called by both Vigil and Steward</text>
+  <text x="1020" y="524" font-size="11" text-anchor="middle" fill="#57534e">NPU engine reserved for</text>
+  <text x="1020" y="540" font-size="11" text-anchor="middle" fill="#57534e">Frigate GenAI - not available</text>
+  <text x="1020" y="556" font-size="11" text-anchor="middle" fill="#57534e">to Vigil or Steward</text>
+  <text x="1020" y="586" font-size="11" text-anchor="middle" fill="#57534e">Vigil: cheap/narrow calls,</text>
+  <text x="1020" y="602" font-size="11" text-anchor="middle" fill="#57534e">high frequency, per domain</text>
+  <text x="1020" y="622" font-size="11" text-anchor="middle" fill="#57534e">Steward: full-context calls,</text>
+  <text x="1020" y="638" font-size="11" text-anchor="middle" fill="#57534e">low frequency, gated by Vigil</text>
+
+  <!-- All connectors below: strictly vertical or horizontal -->
+
+  <!-- Senses -> Reflex (vertical, x=230) -->
+  <path d="M 230 820 L 230 672" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- Senses -> Vigil (vertical, x=580) -->
+  <path d="M 580 820 L 580 672" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- Vigil -> Steward (vertical, x=580) -->
+  <path d="M 580 538 L 580 472" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- Steward -> the Ward (vertical, x=580) -->
+  <path d="M 580 378 L 580 317" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- the Ward -> HA service calls (vertical, x=580) -->
+  <path d="M 580 213 L 580 92" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- Reflex -> HA service calls, straight vertical the whole way (x=230), bypassing Steward and the Ward -->
+  <path d="M 230 538 L 230 92" stroke="#1d4ed8" stroke-width="2" fill="none" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+
+  <!-- Steward -> AI Engine (horizontal, y=425) -->
+  <path d="M 720 425 L 898 425" stroke="#7c3aed" stroke-width="2" fill="none" stroke-dasharray="4,4" marker-end="url(#arrowPurple)"/>
+  <!-- Vigil -> AI Engine (horizontal, y=595) -->
+  <path d="M 720 595 L 898 595" stroke="#7c3aed" stroke-width="2" fill="none" stroke-dasharray="4,4" marker-end="url(#arrowPurple)"/>
+
+</svg>
+
+</div>
+<div class="panel"><h2>2 · The six functional domains (cross-cut Reflex and Vigil)</h2>
+<svg viewBox="0 0 1180 700" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+  </defs>
+
+  <rect width="1180" height="700" fill="#ffffff"/>
+
+  <!-- STEWARD, Level 2, near the top -->
+  <rect x="475" y="40" width="240" height="90" rx="10" fill="#f5f3ff" stroke="#6d28d9" stroke-width="2"/>
+  <text x="595" y="72" font-size="16" font-weight="700" text-anchor="middle" fill="#4c1d95">STEWARD (Level 2)</text>
+  <text x="595" y="92" font-size="12" text-anchor="middle" fill="#4c1d95">domain-agnostic once woken -</text>
+  <text x="595" y="108" font-size="12" text-anchor="middle" fill="#4c1d95">synthesises across all domains</text>
+
+  <!-- arrow up from Vigil bus to Steward -->
+  <path d="M 595 220 L 595 132" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="770" y="180" font-size="12" font-style="italic" fill="#64748b">any domain escalating wakes Steward</text>
+
+  <!-- Vigil boundary, Level 1, below Steward -->
+  <rect x="40" y="220" width="1100" height="440" rx="14" fill="#fffbeb" stroke="#b45309" stroke-width="2" stroke-dasharray="8,6"/>
+  <text x="64" y="252" font-size="16" font-weight="700" fill="#78350f" letter-spacing="1">VIGIL (Level 1)</text>
+  <text x="64" y="272" font-size="12" fill="#92400e">six independent domain functions, same rank as each other - none depends on another to run</text>
+
+  <!-- Vigil bus / access controller -->
+  <rect x="70" y="290" width="1050" height="56" rx="8" fill="#e0e7ff" stroke="#4338ca" stroke-width="2"/>
+  <text x="595" y="312" font-size="13" font-weight="700" text-anchor="middle" fill="#312e81">VIGIL BUS / ACCESS CONTROLLER — deterministic, not a judgment layer</text>
+  <text x="595" y="330" font-size="10.5" text-anchor="middle" fill="#3730a3">arbitrates shared AI Engine access across domains, QCI-style priority classes - positioned, NOT designed. Blocked on real per-domain call cost/frequency.</text>
+
+  <!-- Six domain boxes, parallel, same rank, below the bus -->
+  <g>
+    <rect x="70" y="380" width="160" height="130" rx="8" fill="#fff" stroke="#b45309" stroke-width="1.5"/>
+    <text x="150" y="408" font-size="13" font-weight="700" text-anchor="middle" fill="#78350f">SAFETY</text>
+    <text x="150" y="430" font-size="10.5" text-anchor="middle" fill="#92400e">fire, gas, leak,</text>
+    <text x="150" y="445" font-size="10.5" text-anchor="middle" fill="#92400e">falls, structural</text>
+    <text x="150" y="470" font-size="10" font-style="italic" text-anchor="middle" fill="#b45309">likely: cheapest,</text>
+    <text x="150" y="484" font-size="10" font-style="italic" text-anchor="middle" fill="#b45309">fastest, highest</text>
+    <text x="150" y="498" font-size="10" font-style="italic" text-anchor="middle" fill="#b45309">priority</text>
+  </g>
+
+  <g>
+    <rect x="250" y="380" width="160" height="130" rx="8" fill="#fff" stroke="#b45309" stroke-width="1.5"/>
+    <text x="330" y="408" font-size="13" font-weight="700" text-anchor="middle" fill="#78350f">SECURITY</text>
+    <text x="330" y="430" font-size="10.5" text-anchor="middle" fill="#92400e">intrusion, unrecognized</text>
+    <text x="330" y="445" font-size="10.5" text-anchor="middle" fill="#92400e">presence, unsecured entries</text>
+  </g>
+
+  <g>
+    <rect x="430" y="380" width="160" height="130" rx="8" fill="#fff" stroke="#b45309" stroke-width="1.5"/>
+    <text x="510" y="408" font-size="13" font-weight="700" text-anchor="middle" fill="#78350f">COMFORT</text>
+    <text x="510" y="430" font-size="10.5" text-anchor="middle" fill="#92400e">temperature, air</text>
+    <text x="510" y="445" font-size="10.5" text-anchor="middle" fill="#92400e">quality, light, noise</text>
+  </g>
+
+  <g>
+    <rect x="610" y="380" width="180" height="130" rx="8" fill="#fff" stroke="#b45309" stroke-width="1.5"/>
+    <text x="700" y="408" font-size="13" font-weight="700" text-anchor="middle" fill="#78350f">PATTERN DEVIATION</text>
+    <text x="700" y="430" font-size="10.5" text-anchor="middle" fill="#92400e">resident or device</text>
+    <text x="700" y="445" font-size="10.5" text-anchor="middle" fill="#92400e">deviating from baseline</text>
+    <text x="700" y="470" font-size="10" font-style="italic" text-anchor="middle" fill="#b45309">likely: needs more</text>
+    <text x="700" y="484" font-size="10" font-style="italic" text-anchor="middle" fill="#b45309">context per call -</text>
+    <text x="700" y="498" font-size="10" font-style="italic" text-anchor="middle" fill="#b45309">comparing against history</text>
+  </g>
+
+  <g>
+    <rect x="810" y="380" width="170" height="130" rx="8" fill="#fff" stroke="#b45309" stroke-width="1.5"/>
+    <text x="895" y="408" font-size="13" font-weight="700" text-anchor="middle" fill="#78350f">RESOURCE STEWARDSHIP</text>
+    <text x="895" y="430" font-size="10.5" text-anchor="middle" fill="#92400e">energy/water waste,</text>
+    <text x="895" y="445" font-size="10.5" text-anchor="middle" fill="#92400e">cost</text>
+  </g>
+
+  <g>
+    <rect x="1000" y="380" width="120" height="130" rx="8" fill="#fff" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4,3"/>
+    <text x="1060" y="408" font-size="12.5" font-weight="700" text-anchor="middle" fill="#7f1d1d">HOUSEHOLD</text>
+    <text x="1060" y="424" font-size="12.5" font-weight="700" text-anchor="middle" fill="#7f1d1d">OPERATIONS</text>
+    <text x="1060" y="448" font-size="10" text-anchor="middle" fill="#7f1d1d">anticipating</text>
+    <text x="1060" y="462" font-size="10" text-anchor="middle" fill="#7f1d1d">routine needs</text>
+    <text x="1060" y="486" font-size="9.5" font-style="italic" text-anchor="middle" fill="#dc2626">watch: most at risk</text>
+    <text x="1060" y="498" font-size="9.5" font-style="italic" text-anchor="middle" fill="#dc2626">of being Reflex</text>
+    <text x="1060" y="510" font-size="9.5" font-style="italic" text-anchor="middle" fill="#dc2626">in disguise</text>
+  </g>
+
+  <!-- arrows from each domain box up into the bus -->
+  <path d="M 150 378 L 150 348" stroke="#4338ca" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 330 378 L 330 348" stroke="#4338ca" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 510 378 L 510 348" stroke="#4338ca" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 700 378 L 700 348" stroke="#4338ca" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 895 378 L 895 348" stroke="#4338ca" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 1060 378 L 1060 348" stroke="#4338ca" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Note: below the domains, Senses feeds them (Level 0 -> Level 1) -->
+  <text x="595" y="545" font-size="12" font-style="italic" text-anchor="middle" fill="#64748b">each domain function evaluates events from Senses (Level 0, below) - not drawn here, see the full-stack diagram</text>
+
+  <!-- ZenOS-AI precedent note -->
+  <rect x="70" y="565" width="1050" height="60" rx="8" fill="#fef3c7" stroke="#b45309" stroke-width="1"/>
+  <text x="595" y="588" font-size="11" text-anchor="middle" fill="#78350f">ZenOS-AI precedent (read from source): priority-based load-shedding under queue pressure,</text>
+  <text x="595" y="606" font-size="11" text-anchor="middle" fill="#78350f">a fast-path tier that bypasses delay entirely for the highest-priority class - shape to design against, once domain call costs are real</text>
+
+</svg>
+
+</div>
+<div class="legend">Reflex acts directly and bypasses the Steward and the Ward · Vigil decides what wakes the Steward · the Ward is a deterministic gate · the AI Engine (LXC 252 Lemonade) is shared by Vigil and Steward, with the NPU reserved for Frigate GenAI</div>
+</div></body></html>

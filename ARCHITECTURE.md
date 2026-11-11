@@ -1,121 +1,95 @@
 > Living document. Update when layers, boundaries, or wake model change.
-> The full design specification is `docs/architecture.md`; design rules are in `docs/decisions/D###.md`.
+> The full design specification is `docs/architecture.md`; design rules are in
+> `docs/decisions/D###.md`; the original architecture theses are in `docs/source/`.
 
 # Architecture — Abode AI Autonomy Steward
 
 ## Purpose
 
-System 2 in the autonomous home: continuous, stateless, goal-level reasoning that proposes or executes actions, gated by an append-only constraint layer.
+System 2 in the autonomous home — the **Steward** — continuous, stateless,
+goal-level reasoning that proposes or executes actions, gated by the **Ward**
+(an append-only constraint layer). The Steward is one component of a larger
+middleware.
 
-## Tech stack
+## The five components, four ranks
 
-| Layer | Technology |
-| ----- | ---------- |
-| App runtime | Python 3 (Alpine), `aiohttp`, `pyyaml`, Supervisor token |
-| Platform | Home Assistant OS / Supervisor (App) |
-| Companion | Home Assistant custom integration (Probatio form) |
-| Persistence | `/data/approved_action_types.json`, `/data/constraints.yaml` |
+| Rank | Component | Role | Status |
+| --- | --- | --- | --- |
+| 0 | **Senses** | Perception substrate (Frigate, HA sensors) — external | existing apps |
+| 1 | **Reflex** | Deterministic automations, zero reasoning, act directly | HA automations |
+| 1 | **Vigil** | Cheap domain-scoped salience — decides what wakes the Steward | **not built** |
+| 2 | **Steward** | Slow full reasoning — proposes actions | this App |
+| 3 | **the Ward** | Deterministic gate on every proposal | `constraint_layer.py` |
+| 4 | HA service calls | Actuation — outside the middleware | HA |
 
-## Directory structure
+Reflex and Vigil are the **same rank** — both consume Senses directly, neither
+feeds the other. Reflex bypasses the Steward and the Ward.
 
-```text
-abode_ai_autonomy_steward/               # the App (Supervisor-managed container)
-  abode_ai_autonomy_steward.py           #   event-driven reasoning loop (System 2)
-  constraint_layer.py                    #   append-only constraint engine
-  decision_log.py                        #   append-only decision log
-  charter.py                             #   charter loader (seed + read)
-  charter.md                             #   shipped charter, seeded to /data
-  wake_filter.py                         #   auto-suppress noisy wake sources
-  config.yaml                            #   App options — min_confidence only
-  constraints.yaml                       #   shipped constraint defaults (seed)
-  Dockerfile                             #   App image
-  run.sh                                 #   entrypoint — exports MIN_CONFIDENCE
-  DOCS.md                                #   App documentation
-  icon.png                               #   App icon
-
-custom_components/
-  abode_ai_autonomy_steward_config/      # companion integration (runs inside HA Core)
-    __init__.py                          #   sensor platform setup
-    config_flow.py                       #   config + options flow (Probatio)
-    llm.py                               #   three LLM tools (config, charter, trigger)
-    sensor.py                            #   config sensor exposing attributes
-    const.py                             #   DOMAIN and config keys
-    manifest.json                        #   integration metadata (v0.5.0)
-    translations/en.json                 #   UI translations
-    brand/                               #   brand assets
-
-README.md                                # project overview
-hacs.json                                # HACS metadata
-repository.yaml                          # App-store repository metadata
-LICENSE
-
-docs/
-  architecture.md                        # full design specification
-  decisions/                             # design rules D000–Dnnn
-
-tests/
-  test_constraint_layer.py               # constraint matching + append-only
-  test_decision_log.py                   # decision log append + order
-  test_charter.py                        # charter seed + append semantics
-  test_wake_filter.py                    # noisy-entity auto-suppression
 ```
+Senses (0)
+  ├── Reflex (1) ──────────────────────────► HA service calls (4)   [bypass]
+  └── Vigil (1) ──► Steward (2) ──► Ward (3) ─► HA service calls (4)
+        │                  │
+        └─── AI Engine ◄───┘   (LXC 252 Lemonade — shared substrate, not a rank)
+```
+
+## The six functional domains
+
+Domains cross-cut Reflex and Vigil — each has a Reflex slice (discrete,
+unambiguous) and a Vigil slice (ambiguous, judgment required):
+
+**Safety** · **Security** · **Comfort** · **Pattern deviation** · **Resource
+stewardship** · **Household operations**
+
+See `docs/architecture.md` for the full definition of each.
+
+## Steward data flow
+
+1. Authenticate to HA Core over the Supervisor WebSocket; read config from
+   `sensor.abode_ai_autonomy_steward_config`.
+2. Subscribe to `state_changed` / `mobile_app_notification_action` / trigger.
+3. Any state change schedules a reasoning pass through a debounce (a
+   `wake_filter` suppresses noisy entities — a stop-gap until Vigil exists).
+4. `_reason()` gathers the state snapshot and calls the AI Engine
+   (`ai_task.generate_data`) with the charter, approved types, and snapshot.
+5. `_handle_decision()` gates: confidence → completeness → Ward → execute
+   (approved) or propose (new).
 
 ## Layer rules
 
-1. **System 2 never polls.** It subscribes to HA's event stream and wakes only when something changes. A short debounce coalesces bursts.
-2. **Stateless per pass.** Every reasoning pass fetches the complete current state, not a delta.
-3. **Constraint layer is independent.** It checks every proposed action deterministically, including already-approved ones.
-4. **Constraints are append-only.** `add_never_rule()` appends; no runtime API edits or deletes rules.
-5. **Two-part install.** The App depends on the companion integration for `notify_service` and `ai_task_entity` selectors.
-6. **Companion integration registers LLM tools** for inspecting config, explaining charter, and triggering a reasoning pass.
+1. **Steward never polls.** Wakes on events only; a debounce coalesces bursts.
+2. **Stateless per pass.** Every pass fetches the complete current state, not
+   a delta.
+3. **The Ward is independent and append-only.** It checks every proposed
+   action deterministically; nothing in the running system can edit or remove
+   a rule.
+4. **Two-part install.** The App depends on the companion integration for
+   `notify_service` / `ai_task_entity` selectors.
+5. **Approvals are nonce-bound and per action type**, never per instance.
+6. **The charter is household-extendable data**, seeded to
+   `/data/charter.md`; the Ward enforces the hard prohibitions, the model
+   honours the conditional boundaries.
 
-## Data flow
+## Key principles (from the thesis)
 
-1. App starts and authenticates against HA via Supervisor token.
-2. App reads `sensor.abode_ai_autonomy_steward_config` for `notify_service` and `ai_task_entity`.
-3. App subscribes to HA event stream; on any event it debounces for `DEBOUNCE_SECONDS`.
-4. After debounce, App fetches complete state snapshot.
-5. App calls the configured `ai_task.*` service with the state snapshot and charter.
-6. AI returns a structured decision: `action_needed`, `action_kind`, `action_type`, `service`, `target_entity`, `service_data`, `reasoning`, `confidence`.
-7. If confidence < `MIN_CONFIDENCE`, do nothing.
-8. Constraint layer checks `is_blocked(service, target_entity, action_type)`.
-9. If blocked, log and do nothing.
-10. If action type not approved, send notification (Approve / Deny / Never).
-11. On Approve: execute service and record `action_type` as approved.
-12. On Never: append a narrow constraint rule.
-13. On Deny: do nothing.
-14. If already approved and warranted: execute service.
-
-## Cross-cutting concerns
-
-- **Determinism:** Constraint layer has no model, no randomness, no external state except the YAML file.
-- **Safety:** Every execution, including already-approved actions, passes the constraint layer.
-- **Minimal options:** Only `min_confidence` is configured in the App. Entity/service selectors live in the companion integration.
-- **Decision trace:** Every action decision and its outcome is appended to an append-only log (`decision_log.py`), so the steward's behaviour is auditable after the fact.
-- **Approval nonce:** An approval or Never is honoured only with the single-use nonce of a pending proposal.
-- **Extensibility:** Frigate and Tara perception inputs are not yet wired in, but the reasoning loop is structured to accept them later.
+- **Judgment, not lookup** — the home must handle situations nobody wrote a
+  rule for.
+- **Awareness ≠ deliberation** — cheap continuous salience gates expensive
+  selective reasoning.
+- **Wake on derived state, not raw state** — threshold crossings, not raw
+  counter increments.
+- **The Steward has no past** — history exists in HA's recorder, reachable
+  over WebSocket; what's missing is the call, not the database.
 
 ## Decisions
 
-The numbered design rules are in `docs/decisions/`. A short summary:
-
-| Rule | Decision |
-| ---- | -------- |
-| D002 | Event-driven wake instead of polling |
-| D010 | Append-only constraints |
-| D003 | Stateless, complete-state passes |
-| D013 | Companion integration for selectors |
-| D018 | Execute the model's service parameters, parsed strictly |
-| D019 | Approvals bound to a single-use proposal nonce |
-| D020 | Append-only decision log |
-| D021 | Charter as household-extendable data |
-| D022 | Auto-suppress noisy wake sources |
-| D023 | Time-of-day constraint windows |
-| D024 | No spoken announcements 21:00–07:00, except alarms |
-| D025 | Constraints can name an exception (`except`) |
+The numbered design rules are in `docs/decisions/`. The five-component model
+and six domains were locked 1 Aug 2026 in the architecture theses under
+`docs/source/`.
 
 ## Known issues / next work
 
-- Frigate and Tara integration as System 0 inputs.
-- Production exercise of the approval flow.
-- See `docs/architecture.md` for the full list of known gaps and unverified behaviour.
+- **Vigil is not built** — the wake filter is a stop-gap.
+- **No history wired in** (Y1).
+- Frigate and Tara not wired as System 0 inputs.
+- See `docs/architecture.md` for the full gap list and open questions.

@@ -4,11 +4,12 @@ A Home Assistant App that continuously reasons about your home's current
 state, proposes actions for one-time approval, then acts autonomously -
 bounded by an append-only constraint layer that only ever grows stricter.
 
-Part of the Abode AI Autonomy system. In its four-layer architecture:
-System 0 is perception (Home Assistant's sensors, and later Frigate/Tara),
-System 1 is fast deterministic automations, **System 2 is this App**, and a
-separate, independent constraint layer gates everything it proposes before
-execution.
+Part of the Abode AI Autonomy system. In its five-component architecture:
+**Senses** is perception (Home Assistant's sensors, and later Frigate/Tara),
+**Reflex** is fast deterministic automations, **Vigil** is domain-scoped
+salience that decides what wakes the Steward (not built yet), **the Steward**
+is this App, and **the Ward** is an independent, append-only constraint layer
+that gates everything the Steward proposes before execution.
 
 ## Two components, install both
 

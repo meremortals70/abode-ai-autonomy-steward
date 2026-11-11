@@ -2,11 +2,12 @@
 
 A Home Assistant App that continuously reasons about your home's current state, proposes actions for one-time approval, then acts autonomously - bounded by an append-only constraint layer that only ever grows stricter.
 
-Abode AI Autonomy Steward is the continuous reasoning layer of your autonomous home (System 2,
-in the four-layer architecture this project settled on: System 0 is
-perception - Home Assistant's sensors, and later Frigate/Tara; System 1 is
-fast deterministic automations; System 2 is Abode AI Autonomy Steward; and a separate,
-independent constraint layer gates everything Abode AI Autonomy Steward proposes before it
+Abode AI Autonomy Steward is the continuous reasoning layer of your autonomous home (the Steward,
+in the five-component architecture this project settled on: Senses is
+perception - Home Assistant's sensors, and later Frigate/Tara; Reflex is
+fast deterministic automations; Vigil is domain-scoped salience that decides
+what wakes the Steward; the Steward is this App; and the Ward is a separate,
+independent constraint layer that gates everything the Steward proposes before it
 can execute).
 
 ## This App requires a companion integration
